@@ -1,0 +1,2324 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Lec.2 — 序列模型 & 多模態</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,800;1,9..144,500&family=Lora:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;600&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f4ebd9;
+    --bg-soft: #ebe0c8;
+    --paper: #faf3e3;
+    --ink: #2b2419;
+    --ink-soft: #5a4f3e;
+    --ink-faint: #8b7e68;
+    --accent-red: #b6432a;
+    --accent-green: #3f5d3a;
+    --accent-mustard: #c98e2b;
+    --accent-blue: #2f5b75;
+    --accent-pink: #d28a8a;
+    --line: #c8b896;
+    --line-strong: #8b7e68;
+    --shadow: 4px 4px 0 #2b2419;
+    --shadow-soft: 2px 2px 0 #8b7e68;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'Lora', 'Noto Sans TC', Georgia, serif;
+    overflow: hidden;
+    height: 100vh;
+    width: 100vw;
+  }
+  /* === 純 CSS 漸層背景，無 noise filter（先前 lag 元兇） === */
+  body {
+    background:
+      radial-gradient(ellipse at top left, rgba(255,250,235,0.7), transparent 50%),
+      radial-gradient(ellipse at bottom right, rgba(201,142,43,0.06), transparent 50%),
+      var(--bg);
+  }
+
+  /* === Top nav === */
+  .topbar {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    height: 60px;
+    background: var(--paper);
+    border-bottom: 2px solid var(--ink);
+    display: flex;
+    align-items: center;
+    padding: 0 24px;
+    z-index: 100;
+    box-shadow: 0 4px 0 var(--ink);
+  }
+  .brand {
+    font-family: 'Fraunces', serif;
+    font-weight: 800;
+    font-size: 20px;
+    letter-spacing: -0.02em;
+    margin-right: 32px;
+  }
+  .brand .num {
+    background: var(--accent-red);
+    color: var(--paper);
+    padding: 2px 8px;
+    margin-right: 6px;
+    border-radius: 2px;
+    transform: rotate(-2deg);
+    display: inline-block;
+  }
+  .nav-tabs {
+    display: flex;
+    gap: 4px;
+    flex: 1;
+    overflow-x: auto;
+    scrollbar-width: thin;
+  }
+  .nav-tab {
+    font-family: 'Fraunces', serif;
+    font-size: 14px;
+    padding: 6px 14px;
+    border: 1.5px solid var(--ink);
+    background: var(--bg-soft);
+    cursor: pointer;
+    color: var(--ink);
+    white-space: nowrap;
+    border-radius: 2px;
+    font-weight: 600;
+    /* 用 transform 而非 margin/padding 動畫，走 GPU */
+    transition: transform 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+    will-change: transform;
+  }
+  .nav-tab:hover {
+    background: var(--accent-mustard);
+    transform: translate3d(-2px, -2px, 0);
+    box-shadow: 2px 2px 0 var(--ink);
+  }
+  .nav-tab.active {
+    background: var(--ink);
+    color: var(--paper);
+  }
+  .progress-bar {
+    margin-left: 16px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--ink-soft);
+  }
+
+  /* === Stage === */
+  .stage {
+    position: fixed;
+    top: 60px;
+    bottom: 60px;
+    left: 0;
+    right: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    z-index: 2;
+  }
+  .page {
+    min-height: 100%;
+    padding: 40px 6vw;
+    display: none;
+  }
+  .page.active {
+    display: block;
+    animation: pageIn 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  @keyframes pageIn {
+    0% { opacity: 0; transform: translate3d(0, 24px, 0); }
+    100% { opacity: 1; transform: translate3d(0, 0, 0); }
+  }
+
+  /* === Stagger 進場 === */
+  .page.active .page-header { animation: slideIn 0.55s cubic-bezier(0.22, 1, 0.36, 1) both; }
+  .page.active .page-tagline { animation: slideIn 0.55s cubic-bezier(0.22, 1, 0.36, 1) 0.08s both; }
+  .page.active .section-h { animation: slideIn 0.55s cubic-bezier(0.22, 1, 0.36, 1) both; }
+  .page.active .figure-box { animation: figIn 0.7s cubic-bezier(0.22, 1, 0.36, 1) 0.12s both; }
+  .page.active .demo-panel { animation: figIn 0.7s cubic-bezier(0.22, 1, 0.36, 1) 0.16s both; }
+  .page.active .callout { animation: slideIn 0.55s cubic-bezier(0.22, 1, 0.36, 1) 0.1s both; }
+
+  @keyframes slideIn {
+    0% { opacity: 0; transform: translate3d(-12px, 0, 0); }
+    100% { opacity: 1; transform: translate3d(0, 0, 0); }
+  }
+  @keyframes figIn {
+    0% { opacity: 0; transform: translate3d(0, 16px, 0) scale(0.985); }
+    100% { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+  }
+
+  /* === Page structure === */
+  .page-header {
+    display: flex;
+    align-items: baseline;
+    gap: 20px;
+    margin-bottom: 8px;
+    border-bottom: 2px solid var(--ink);
+    padding-bottom: 16px;
+  }
+  .page-num {
+    font-family: 'Fraunces', serif;
+    font-weight: 800;
+    font-size: 72px;
+    line-height: 1;
+    color: var(--accent-red);
+    letter-spacing: -0.04em;
+  }
+  .page-title {
+    font-family: 'Fraunces', serif;
+    font-weight: 800;
+    font-size: 42px;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    margin: 0;
+  }
+  .page-sub {
+    font-style: italic;
+    color: var(--ink-soft);
+    font-size: 16px;
+    margin-top: 8px;
+  }
+  .page-tagline {
+    font-family: 'Fraunces', serif;
+    font-style: italic;
+    font-size: 18px;
+    color: var(--accent-green);
+    margin: 16px 0 24px;
+    padding-left: 16px;
+    border-left: 4px solid var(--accent-mustard);
+  }
+
+  .section-h {
+    font-family: 'Fraunces', serif;
+    font-weight: 800;
+    font-size: 22px;
+    margin: 32px 0 12px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .section-h::before {
+    content: '';
+    width: 24px;
+    height: 4px;
+    background: var(--accent-red);
+    display: inline-block;
+  }
+  .body-p {
+    font-size: 15.5px;
+    line-height: 1.85;
+    max-width: 70ch;
+    margin: 8px 0 14px;
+  }
+  .body-p code, .inline-code {
+    font-family: 'JetBrains Mono', monospace;
+    background: var(--bg-soft);
+    padding: 1px 6px;
+    border-radius: 2px;
+    font-size: 0.88em;
+    border: 1px solid var(--line);
+  }
+
+  .callout {
+    background: var(--paper);
+    border: 2px solid var(--ink);
+    box-shadow: var(--shadow);
+    padding: 16px 20px;
+    margin: 20px 0;
+    max-width: 80ch;
+    position: relative;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    will-change: transform;
+  }
+  .callout:hover {
+    transform: translate3d(-2px, -2px, 0);
+    box-shadow: 6px 6px 0 var(--ink);
+  }
+  .callout::before {
+    content: attr(data-label);
+    position: absolute;
+    top: -12px;
+    left: 16px;
+    background: var(--accent-mustard);
+    color: var(--ink);
+    padding: 2px 10px;
+    font-family: 'Fraunces', serif;
+    font-weight: 700;
+    font-size: 12px;
+    letter-spacing: 0.1em;
+    border: 1.5px solid var(--ink);
+  }
+
+  /* === Hover hint === */
+  .hov {
+    position: relative;
+    cursor: help;
+    border-bottom: 1.5px dashed var(--accent-red);
+    padding: 0 1px;
+    transition: background-color 0.15s ease;
+  }
+  .hov:hover { background: rgba(201,142,43,0.25); }
+  .tip-popup {
+    position: fixed;
+    z-index: 200;
+    background: var(--paper);
+    border: 2px solid var(--ink);
+    box-shadow: var(--shadow);
+    padding: 12px 16px;
+    max-width: 320px;
+    font-size: 13.5px;
+    line-height: 1.65;
+    pointer-events: none;
+    opacity: 0;
+    transform: translate3d(0, 4px, 0);
+    transition: opacity 0.12s ease, transform 0.12s ease;
+    will-change: opacity, transform;
+  }
+  .tip-popup.show {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+  .tip-popup .tip-title {
+    font-family: 'Fraunces', serif;
+    font-weight: 700;
+    color: var(--accent-red);
+    font-size: 14px;
+    margin-bottom: 6px;
+    display: block;
+    border-bottom: 1px dotted var(--ink-soft);
+    padding-bottom: 4px;
+  }
+
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 32px;
+    margin: 24px 0;
+  }
+  @media (max-width: 900px) { .two-col { grid-template-columns: 1fr; } }
+
+  table.book {
+    border-collapse: collapse;
+    margin: 16px 0;
+    background: var(--paper);
+    border: 2px solid var(--ink);
+    box-shadow: var(--shadow);
+    font-size: 14px;
+  }
+  table.book th, table.book td {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--line);
+    border-right: 1px solid var(--line);
+    text-align: left;
+  }
+  table.book th {
+    background: var(--accent-green);
+    color: var(--paper);
+    font-family: 'Fraunces', serif;
+    font-weight: 700;
+  }
+  table.book tr:last-child td { border-bottom: 0; }
+  table.book td:last-child, table.book th:last-child { border-right: 0; }
+  table.book tbody tr { transition: background-color 0.15s ease; }
+  table.book tbody tr:hover td { background: var(--bg-soft); }
+
+  .figure-box {
+    background: var(--paper);
+    border: 2px solid var(--ink);
+    box-shadow: var(--shadow);
+    padding: 24px;
+    margin: 24px 0;
+    position: relative;
+  }
+  .figure-cap {
+    font-style: italic;
+    font-size: 13px;
+    color: var(--ink-soft);
+    text-align: center;
+    margin-top: 12px;
+    border-top: 1px dotted var(--line);
+    padding-top: 8px;
+  }
+  .figure-tag {
+    position: absolute;
+    top: -12px;
+    right: 16px;
+    background: var(--accent-blue);
+    color: var(--paper);
+    padding: 2px 10px;
+    font-family: 'Fraunces', serif;
+    font-weight: 700;
+    font-size: 12px;
+    border: 1.5px solid var(--ink);
+  }
+
+  .demo-panel {
+    background: var(--paper);
+    border: 2px solid var(--ink);
+    box-shadow: var(--shadow);
+    padding: 24px;
+    margin: 24px 0;
+  }
+  .demo-title {
+    font-family: 'Fraunces', serif;
+    font-weight: 700;
+    font-size: 18px;
+    color: var(--accent-red);
+    margin: 0 0 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .demo-title::before {
+    content: '◆';
+    color: var(--accent-mustard);
+  }
+  .demo-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    align-items: center;
+    margin: 12px 0;
+    padding: 12px;
+    background: var(--bg-soft);
+    border: 1px dashed var(--line-strong);
+  }
+  .ctrl-group {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 13px;
+  }
+  .ctrl-group label {
+    font-family: 'Fraunces', serif;
+    font-weight: 600;
+    color: var(--ink-soft);
+    font-size: 12px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+  .ctrl-group input[type="range"] {
+    width: 200px;
+    accent-color: var(--accent-red);
+  }
+  .ctrl-group input[type="text"] {
+    background: var(--paper);
+    border: 1.5px solid var(--ink);
+    padding: 6px 10px;
+    font-family: 'Lora', 'Noto Sans TC', serif;
+    font-size: 14px;
+    width: 280px;
+  }
+  .ctrl-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--accent-red);
+    font-weight: 600;
+  }
+  .btn {
+    font-family: 'Fraunces', serif;
+    font-weight: 600;
+    background: var(--ink);
+    color: var(--paper);
+    border: 2px solid var(--ink);
+    padding: 6px 16px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: transform 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+    will-change: transform;
+  }
+  .btn:hover {
+    background: var(--accent-red);
+    transform: translate3d(-1px, -1px, 0);
+    box-shadow: 2px 2px 0 var(--ink);
+  }
+  .btn:active {
+    transform: translate3d(1px, 1px, 0);
+    box-shadow: 0 0 0 var(--ink);
+  }
+  .btn.secondary { background: var(--paper); color: var(--ink); }
+  .btn.secondary:hover { background: var(--accent-mustard); }
+
+  .bottombar {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    height: 60px;
+    background: var(--paper);
+    border-top: 2px solid var(--ink);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 24px;
+    z-index: 100;
+  }
+  .nav-arrow {
+    font-family: 'Fraunces', serif;
+    font-weight: 700;
+    font-size: 14px;
+    background: var(--bg-soft);
+    border: 2px solid var(--ink);
+    padding: 8px 18px;
+    cursor: pointer;
+    transition: transform 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease, color 0.15s ease;
+    box-shadow: var(--shadow-soft);
+    will-change: transform;
+  }
+  .nav-arrow:hover:not(:disabled) {
+    background: var(--accent-red);
+    color: var(--paper);
+    transform: translate3d(-2px, -2px, 0);
+    box-shadow: 4px 4px 0 var(--ink);
+  }
+  .nav-arrow:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+  }
+  .nav-center {
+    font-family: 'Fraunces', serif;
+    font-style: italic;
+    color: var(--ink-soft);
+    font-size: 14px;
+  }
+
+  /* === SVG hover === */
+  .node {
+    cursor: help;
+    transition: filter 0.15s ease;
+  }
+  .node:hover {
+    filter: brightness(1.08) drop-shadow(0 2px 4px rgba(182,67,42,0.35));
+  }
+  text { font-family: 'Lora', 'Noto Sans TC', serif; fill: var(--ink); }
+
+  .eq-block {
+    text-align: center;
+    margin: 16px auto;
+    padding: 16px;
+    background: var(--bg-soft);
+    border: 1.5px dashed var(--line-strong);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 15px;
+    max-width: 600px;
+  }
+  .eq {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    background: var(--paper);
+    padding: 10px 16px;
+    border-left: 3px solid var(--accent-red);
+    margin: 10px 0;
+    display: inline-block;
+  }
+
+  .compare-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 16px;
+    margin: 20px 0;
+  }
+  .compare-card {
+    background: var(--paper);
+    border: 2px solid var(--ink);
+    padding: 16px;
+    box-shadow: var(--shadow);
+    transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.2s ease;
+    will-change: transform;
+  }
+  .compare-card:hover {
+    transform: translate3d(-3px, -3px, 0);
+    box-shadow: 6px 6px 0 var(--ink);
+  }
+  .compare-card h4 {
+    font-family: 'Fraunces', serif;
+    margin: 0 0 8px;
+    font-size: 18px;
+    color: var(--accent-red);
+  }
+  .compare-card .meta {
+    font-style: italic;
+    color: var(--ink-soft);
+    font-size: 12px;
+    margin-bottom: 8px;
+  }
+
+  .stage::-webkit-scrollbar { width: 8px; }
+  .stage::-webkit-scrollbar-track { background: var(--bg-soft); }
+  .stage::-webkit-scrollbar-thumb { background: var(--ink-soft); }
+
+  .hd-under {
+    position: relative;
+    display: inline-block;
+  }
+  .hd-under::after {
+    content: '';
+    position: absolute;
+    left: -2px; right: -2px; bottom: -3px;
+    height: 6px;
+    background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 6'><path d='M0,3 Q25,0 50,3 T100,3' stroke='%23b6432a' stroke-width='1.5' fill='none'/></svg>") repeat-x;
+    background-size: 100px 6px;
+  }
+
+  /* ============================================================
+     LSTM 動畫 — 用 CSS Grid + transition (而非每幀重畫 SVG)
+     這是順暢動畫的關鍵：建一次結構，後續只改 CSS variable
+     ============================================================ */
+  .lstm-board {
+    background: var(--bg-soft);
+    border: 1px solid var(--line-strong);
+    padding: 20px;
+    border-radius: 4px;
+  }
+  .lstm-row { display: flex; align-items: center; gap: 12px; margin: 14px 0; }
+  .lstm-row-label {
+    font-family: 'Fraunces', serif;
+    font-weight: 700;
+    font-size: 13px;
+    width: 120px;
+    flex-shrink: 0;
+  }
+  .lstm-row-label small {
+    display: block;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 400;
+    color: var(--ink-soft);
+    margin-top: 2px;
+  }
+  .lstm-tokens {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .lstm-token {
+    padding: 8px 14px;
+    background: var(--paper);
+    border: 1.5px solid var(--ink);
+    border-radius: 2px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    /* GPU 加速的 transform，順暢 */
+    transition: background-color 0.45s cubic-bezier(0.22, 1, 0.36, 1),
+                color 0.45s ease,
+                transform 0.45s cubic-bezier(0.22, 1, 0.36, 1),
+                box-shadow 0.45s ease;
+    will-change: transform, background-color;
+  }
+  .lstm-token.past { background: var(--accent-mustard); }
+  .lstm-token.active {
+    background: var(--accent-red);
+    color: var(--paper);
+    transform: translate3d(0, -4px, 0) scale(1.08);
+    box-shadow: 0 4px 0 var(--ink);
+  }
+  .lstm-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+    flex: 1;
+    max-width: 600px;
+  }
+  .lstm-cell {
+    height: 48px;
+    border: 1.5px solid var(--ink);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    background: var(--paper);
+    /* 用 CSS variable 控制色彩強度，過渡平滑 */
+    transition: background-color 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+    position: relative;
+    overflow: hidden;
+  }
+  .lstm-cell .label { font-size: 10px; color: var(--ink-soft); font-style: italic; }
+  .lstm-cell .val {
+    font-weight: 700;
+    font-size: 13px;
+    transition: color 0.4s ease;
+  }
+  .lstm-cell.gate-mustard { background: rgba(201, 142, 43, var(--intensity, 0)); }
+  .lstm-cell.gate-green { background: rgba(63, 93, 58, var(--intensity, 0)); }
+  .lstm-cell.gate-blue { background: rgba(47, 91, 117, var(--intensity, 0)); }
+  .lstm-cell.gate-red { background: rgba(182, 67, 42, var(--intensity, 0)); }
+  .lstm-cell[style*="--intensity: 0.7"] .val,
+  .lstm-cell[style*="--intensity: 0.8"] .val,
+  .lstm-cell[style*="--intensity: 0.9"] .val,
+  .lstm-cell[style*="--intensity: 1"] .val {
+    color: var(--paper);
+  }
+
+  .lstm-highway {
+    height: 4px;
+    background: linear-gradient(to right, transparent 0, var(--accent-red) 8%, var(--accent-red) 92%, transparent 100%);
+    margin: 4px 0 12px;
+    position: relative;
+    overflow: hidden;
+  }
+  .lstm-highway::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0;
+    width: 30%; height: 100%;
+    background: linear-gradient(to right, transparent, rgba(255, 240, 200, 0.9), transparent);
+    transform: translateX(-100%);
+    animation: highwayFlow 2.6s ease-in-out infinite;
+    will-change: transform;
+  }
+  @keyframes highwayFlow {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(370%); }
+  }
+
+  /* ============================================================
+     Self-Attention 熱力圖 — 同樣只更新 cell 顏色，不重建 DOM
+     ============================================================ */
+  .attn-grid-wrap {
+    display: inline-grid;
+    gap: 2px;
+    background: var(--ink);
+    padding: 2px;
+  }
+  .attn-cell {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    cursor: pointer;
+    /* 注意這裡 — 顏色 transition 是順暢的關鍵 */
+    transition: background-color 0.4s cubic-bezier(0.22, 1, 0.36, 1),
+                color 0.3s ease,
+                transform 0.15s ease;
+    will-change: transform;
+  }
+  .attn-cell:hover {
+    transform: scale(1.15);
+    z-index: 10;
+    box-shadow: 0 0 0 2px var(--accent-red);
+  }
+  .attn-cell.row-focus {
+    box-shadow: inset 0 0 0 1.5px var(--accent-red);
+  }
+  .attn-header {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    background: var(--paper);
+    padding: 4px;
+    text-align: center;
+    transition: background-color 0.25s ease, color 0.25s ease;
+  }
+  .attn-header.row-focus {
+    background: var(--accent-red);
+    color: var(--paper);
+    font-weight: 700;
+  }
+  .attn-header.col-focus {
+    background: var(--accent-mustard);
+    font-weight: 700;
+  }
+
+  /* === Bar 圖（用 HTML/CSS，不用 SVG，因 width transition 更順） === */
+  .attn-bar-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 4px 0;
+  }
+  .attn-bar-label {
+    width: 90px;
+    text-align: right;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    flex-shrink: 0;
+    transition: color 0.2s ease;
+  }
+  .attn-bar-label.focus { color: var(--accent-red); font-weight: 700; }
+  .attn-bar-track {
+    flex: 1;
+    height: 18px;
+    background: var(--bg-soft);
+    border: 1px solid var(--line);
+    position: relative;
+    overflow: hidden;
+  }
+  .attn-bar-fill {
+    height: 100%;
+    background: var(--accent-green);
+    /* width transition 是 GPU friendly */
+    transition: width 0.6s cubic-bezier(0.22, 1, 0.36, 1),
+                background-color 0.3s ease;
+    will-change: width;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding-right: 6px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--paper);
+    font-weight: 700;
+    min-width: 2px;
+  }
+  .attn-bar-fill.focus { background: var(--accent-red); }
+
+  .token-chip {
+    display: inline-block;
+    padding: 6px 12px;
+    margin: 4px;
+    background: var(--paper);
+    border: 1.5px solid var(--ink);
+    border-radius: 2px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    cursor: pointer;
+    box-shadow: 2px 2px 0 var(--line-strong);
+    transition: transform 0.15s ease, background-color 0.15s ease, color 0.15s ease;
+    will-change: transform;
+  }
+  .token-chip:hover {
+    background: var(--accent-mustard);
+    transform: translate3d(-1px, -1px, 0);
+  }
+  .token-chip.focus {
+    background: var(--accent-red);
+    color: var(--paper);
+  }
+
+  /* === RNN 攤開動畫：紅色 hidden state 流動點 === */
+  @keyframes rnnPulse {
+    0%, 100% { fill: #faf3e3; }
+    50% { fill: #ffe9c8; }
+  }
+  .rnn-cell-anim { animation: rnnPulse 2.5s ease-in-out infinite; }
+  .rnn-cell-anim:nth-of-type(2) { animation-delay: 0.2s; }
+  .rnn-cell-anim:nth-of-type(3) { animation-delay: 0.4s; }
+  .rnn-cell-anim:nth-of-type(4) { animation-delay: 0.6s; }
+
+  .stamp {
+    position: absolute;
+    font-family: 'Fraunces', serif;
+    font-weight: 800;
+    font-size: 14px;
+    color: var(--accent-red);
+    border: 2px solid var(--accent-red);
+    padding: 4px 10px;
+    transform: rotate(-8deg);
+    opacity: 0.7;
+    letter-spacing: 0.1em;
+    pointer-events: none;
+  }
+
+  /* === Accordion === */
+  .accordion { margin: 16px 0; border: 2px solid var(--ink); background: var(--paper); }
+  .accordion-header {
+    padding: 14px 20px;
+    cursor: pointer;
+    font-family: 'Fraunces', serif;
+    font-weight: 700;
+    font-size: 15px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: var(--bg-soft);
+    transition: background-color 0.2s ease;
+    user-select: none;
+  }
+  .accordion-header:hover { background: var(--accent-mustard); color: var(--paper); }
+  .accordion-header::after { content: '▼'; font-size: 12px; transition: transform 0.3s ease; }
+  .accordion.open .accordion-header::after { transform: rotate(180deg); }
+  .accordion-body {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.4s cubic-bezier(0.22, 1, 0.36, 1), padding 0.3s ease;
+    padding: 0 20px;
+  }
+  .accordion.open .accordion-body {
+    max-height: 2000px;
+    padding: 16px 20px;
+  }
+
+  /* === Quiz === */
+  .quiz-panel { background: var(--paper); border: 2px solid var(--accent-green); padding: 20px; margin: 24px 0; box-shadow: var(--shadow); }
+  .quiz-question { font-family: 'Fraunces', serif; font-weight: 700; font-size: 16px; margin-bottom: 14px; color: var(--accent-green); }
+  .quiz-options { display: flex; flex-direction: column; gap: 8px; }
+  .quiz-option {
+    padding: 12px 16px;
+    border: 2px solid var(--line-strong);
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s ease;
+    background: var(--paper);
+  }
+  .quiz-option:hover { border-color: var(--accent-green); background: rgba(63,93,58,0.05); transform: translateX(4px); }
+  .quiz-option.selected { border-color: var(--accent-blue); background: rgba(47,91,117,0.1); }
+  .quiz-option.correct { border-color: var(--accent-green); background: rgba(63,93,58,0.15); }
+  .quiz-option.wrong { border-color: var(--accent-red); background: rgba(182,67,42,0.1); opacity: 0.7; }
+  .quiz-feedback { margin-top: 12px; padding: 12px; font-size: 14px; font-style: italic; border-left: 3px solid var(--accent-green); background: var(--bg-soft); display: none; }
+  .quiz-feedback.show { display: block; }
+
+  /* === Sub-tabs within page === */
+  .sub-tabs { display: flex; gap: 4px; margin: 16px 0 0; border-bottom: 2px solid var(--ink); padding-bottom: 0; }
+  .sub-tab {
+    padding: 8px 16px;
+    font-family: 'Fraunces', serif;
+    font-weight: 600;
+    font-size: 13px;
+    cursor: pointer;
+    border: 1.5px solid var(--ink);
+    border-bottom: none;
+    background: var(--bg-soft);
+    margin-bottom: -2px;
+    transition: background-color 0.15s ease;
+  }
+  .sub-tab:hover { background: var(--accent-mustard); }
+  .sub-tab.active { background: var(--paper); border-bottom: 2px solid var(--paper); }
+  .sub-content { display: none; padding: 20px 0; }
+  .sub-content.active { display: block; }
+
+  /* === Math block === */
+  .math-block {
+    text-align: center;
+    margin: 20px auto;
+    padding: 20px 24px;
+    background: var(--paper);
+    border: 2px solid var(--ink);
+    box-shadow: var(--shadow-soft);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 16px;
+    max-width: 650px;
+    position: relative;
+  }
+  .math-block .math-label {
+    position: absolute;
+    top: -10px;
+    left: 16px;
+    background: var(--accent-red);
+    color: var(--paper);
+    padding: 2px 8px;
+    font-family: 'Fraunces', serif;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  /* === Progress dots === */
+  .progress-dots { display: flex; gap: 6px; align-items: center; }
+  .progress-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    border: 1.5px solid var(--ink);
+    background: var(--bg-soft);
+    transition: background-color 0.3s ease;
+  }
+  .progress-dot.visited { background: var(--accent-green); }
+  .progress-dot.current { background: var(--accent-red); transform: scale(1.3); }
+
+  /* === Drag match game === */
+  .match-game { display: grid; grid-template-columns: 1fr 60px 1fr; gap: 12px; align-items: start; margin: 16px 0; }
+  .match-col { display: flex; flex-direction: column; gap: 8px; }
+  .match-item {
+    padding: 10px 14px;
+    border: 2px solid var(--ink);
+    background: var(--paper);
+    font-size: 13px;
+    cursor: grab;
+    transition: all 0.2s ease;
+    box-shadow: var(--shadow-soft);
+  }
+  .match-item:hover { transform: translateY(-2px); box-shadow: var(--shadow); }
+  .match-item.dragging { opacity: 0.5; }
+  .match-item.matched { background: rgba(63,93,58,0.15); border-color: var(--accent-green); cursor: default; }
+  .match-arrows { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; font-size: 20px; color: var(--ink-soft); }
+
+  /* === Computation step-by-step === */
+  .step-viz { margin: 16px 0; padding: 16px; background: var(--bg-soft); border: 1px dashed var(--line-strong); }
+  .step-row { display: flex; align-items: center; gap: 12px; margin: 8px 0; padding: 8px 12px; border-left: 3px solid transparent; transition: all 0.3s ease; }
+  .step-row.highlight { border-left-color: var(--accent-red); background: rgba(182,67,42,0.05); }
+  .step-num { font-family: 'Fraunces', serif; font-weight: 800; color: var(--accent-red); font-size: 18px; width: 30px; flex-shrink: 0; }
+  .step-content { font-family: 'JetBrains Mono', monospace; font-size: 13px; }
+  .step-explain { font-size: 12px; color: var(--ink-soft); font-style: italic; margin-top: 4px; font-family: 'Lora', serif; }
+
+  /* 尊重使用者減動畫偏好 */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.05s !important;
+    }
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand"><span class="num">02</span> 序列模型 &amp; 多模態</div>
+  <nav class="nav-tabs" id="navTabs">
+    <button class="nav-tab active" data-page="0">序章</button>
+    <button class="nav-tab" data-page="1">RNN</button>
+    <button class="nav-tab" data-page="2">LSTM</button>
+    <button class="nav-tab" data-page="3">ELMo</button>
+    <button class="nav-tab" data-page="4">Transformer</button>
+    <button class="nav-tab" data-page="5">Attention 互動</button>
+    <button class="nav-tab" data-page="6">BERT vs GPT</button>
+    <button class="nav-tab" data-page="7">多模態</button>
+    <button class="nav-tab" data-page="8">作業</button>
+  </nav>
+  <div class="progress-bar" id="progBar">0 / 8</div>
+</header>
+
+<main class="stage" id="stage">
+
+<!-- ============ PAGE 0 — 序章 ============ -->
+<section class="page active" data-page="0">
+  <div class="page-header">
+    <div class="page-num">00</div>
+    <div>
+      <h1 class="page-title">為什麼需要序列模型？</h1>
+      <div class="page-sub">From space to time — CNN 之外的世界</div>
+    </div>
+  </div>
+
+  <p class="page-tagline">「世界上很多資料，不是看一眼就懂的，而是要照順序讀下去才有意義。」</p>
+
+  <h2 class="section-h">上一堂的 CNN 在做什麼？</h2>
+  <p class="body-p">
+    上一堂我們講的 <span class="hov" data-title="CNN" data-tip="Convolutional Neural Network。用 kernel 在圖片上滑動，找局部 pattern，再層層組合成更大的概念。本質上處理的是「空間性」資料。">CNN</span>，本質上是在處理「空間」的問題 —
+    一張圖片每個 pixel 的位置是固定的，CNN 透過 <span class="hov" data-title="Kernel / Filter" data-tip="一個小矩陣（例如 3x3），在輸入上滑動做卷積運算。同一個 kernel 在所有位置共享參數，這就是 weight sharing 的精神。">kernel</span> 在空間上滑來滑去，找出 local pattern，再一層一層組合成更大的概念。
+  </p>
+
+  <h2 class="section-h">但「順序」很重要</h2>
+  <p class="body-p">世界上很多資料不是「空間性」的，而是「時間性 / 順序性」的：</p>
+
+  <div class="figure-box">
+    <span class="figure-tag">EXAMPLES</span>
+    <svg viewBox="0 0 800 220" style="width:100%; max-width:760px; display:block; margin:0 auto;">
+      <g transform="translate(20,20)">
+        <text x="0" y="0" font-family="Fraunces" font-weight="700" font-size="14">①</text>
+        <text x="20" y="0" font-size="13" fill="#5a4f3e">語句 — 字的順序決定意義</text>
+        <g transform="translate(0,16)">
+          <rect class="node" x="0" y="0" width="48" height="28" fill="#faf3e3" stroke="#2b2419" stroke-width="1.5" data-title="Token 1" data-tip="句子裡的第一個字。在序列模型裡，每個字會先被轉成一個向量（word embedding），再依序丟進模型。"/>
+          <text x="24" y="19" text-anchor="middle" font-size="13">我</text>
+          <rect class="node" x="56" y="0" width="48" height="28" fill="#faf3e3" stroke="#2b2419" stroke-width="1.5" data-title="Token 2" data-tip="第二個字。模型在處理它的時候，理想上應該『記得』前面看過『我』。"/>
+          <text x="80" y="19" text-anchor="middle" font-size="13">今天</text>
+          <rect class="node" x="112" y="0" width="48" height="28" fill="#faf3e3" stroke="#2b2419" stroke-width="1.5"/>
+          <text x="136" y="19" text-anchor="middle" font-size="13">很</text>
+          <rect class="node" x="168" y="0" width="48" height="28" fill="#b6432a" stroke="#2b2419" stroke-width="1.5" data-title="關鍵字位置" data-tip="這裡放『開心』還是『不開心』，整句話的情緒就完全相反。順序敏感的最簡例子。"/>
+          <text x="192" y="19" text-anchor="middle" font-size="13" fill="#faf3e3">開心</text>
+          <text x="230" y="19" font-size="12" font-style="italic" fill="#5a4f3e">→ 正面</text>
+        </g>
+      </g>
+
+      <g transform="translate(20,90)">
+        <text x="0" y="0" font-family="Fraunces" font-weight="700" font-size="14">②</text>
+        <text x="20" y="0" font-size="13" fill="#5a4f3e">語音 — 每個時間點的音訊都要連起來</text>
+        <g transform="translate(0,16)">
+          <path d="M0,15 Q20,5 40,15 T80,15 T120,5 T160,20 T200,12 T240,18 T280,8 T320,15" stroke="#3f5d3a" stroke-width="2" fill="none" class="node" data-title="音訊波形" data-tip="語音是連續的時間訊號。傳統做法切成一個個 frame（例如每 25ms 一格），再把這些 frame 當成序列丟進模型。"/>
+          <line x1="0" y1="22" x2="320" y2="22" stroke="#8b7e68" stroke-width="0.5"/>
+        </g>
+      </g>
+
+      <g transform="translate(420,20)">
+        <text x="0" y="0" font-family="Fraunces" font-weight="700" font-size="14">③</text>
+        <text x="20" y="0" font-size="13" fill="#5a4f3e">影片 — 每一幀跟前後幀關聯</text>
+        <g transform="translate(0,16)">
+          <rect class="node" x="0" y="0" width="50" height="36" fill="#ebe0c8" stroke="#2b2419" data-title="Frame t" data-tip="影片的每一幀都是一張圖。但單獨看一幀看不出『動作』，必須跟前後幀一起看。"/>
+          <rect class="node" x="60" y="0" width="50" height="36" fill="#ebe0c8" stroke="#2b2419"/>
+          <rect class="node" x="120" y="0" width="50" height="36" fill="#ebe0c8" stroke="#2b2419"/>
+          <rect class="node" x="180" y="0" width="50" height="36" fill="#ebe0c8" stroke="#2b2419"/>
+          <rect class="node" x="240" y="0" width="50" height="36" fill="#ebe0c8" stroke="#2b2419"/>
+          <text x="20" y="22" font-size="10" font-style="italic">frame 1</text>
+          <text x="80" y="22" font-size="10" font-style="italic">frame 2</text>
+          <text x="140" y="22" font-size="10" font-style="italic">...</text>
+        </g>
+      </g>
+
+      <g transform="translate(420,90)">
+        <text x="0" y="0" font-family="Fraunces" font-weight="700" font-size="14">④</text>
+        <text x="20" y="0" font-size="13" fill="#5a4f3e">時序資料 — 今天跟昨天有關</text>
+        <g transform="translate(0,16)">
+          <polyline class="node" points="0,30 20,25 40,28 60,15 80,18 100,10 120,15 140,5 160,12 180,8 200,15 220,10 240,18 260,12 280,8" stroke="#b6432a" stroke-width="2" fill="none" data-title="時間序列" data-tip="股價、天氣、心電圖、感測器讀數都是這類資料。當前的值跟過去的歷史強烈相關。"/>
+        </g>
+      </g>
+
+      <g transform="translate(20,180)">
+        <rect x="0" y="0" width="760" height="34" fill="#3f5d3a" stroke="#2b2419" stroke-width="2"/>
+        <text x="380" y="22" text-anchor="middle" fill="#faf3e3" font-family="Fraunces" font-size="14" font-style="italic">這些資料的共同點 — 「順序很重要」、「長度不固定」、「過去會影響現在」</text>
+      </g>
+    </svg>
+    <div class="figure-cap">圖 0.1 — 序列性資料的四個典型例子（每個元素皆可 hover）</div>
+  </div>
+
+  <h2 class="section-h">CNN/MLP 處理不來的兩個問題</h2>
+  <div class="two-col">
+    <div class="callout" data-label="問題 1">
+      <strong>輸入長度不固定</strong><br/>
+      <span style="font-size:14px; color:var(--ink-soft);">
+        <span class="hov" data-title="MLP" data-tip="Multi-Layer Perceptron，全連接神經網路。每一層都是 y = Wx + b，要求輸入維度固定。">MLP</span> 要求輸入是固定維度，但句子有長有短 — 一句 5 個字、另一句 50 個字，要怎麼塞進同一個模型？
+      </span>
+    </div>
+    <div class="callout" data-label="問題 2">
+      <strong>沒辦法記住前面的資訊</strong><br/>
+      <span style="font-size:14px; color:var(--ink-soft);">
+        每個輸入都被獨立處理，模型不知道「之前發生了什麼」。但語言、音訊、影片，缺了上下文就毫無意義。
+      </span>
+    </div>
+  </div>
+
+  <p class="page-tagline">
+    所以我們需要一種新架構：它要能<span class="hd-under">記住過去</span>，然後用這個記憶幫助理解現在。<br/>
+    這就是 <strong>RNN</strong> 出場的時刻。
+  </p>
+
+  <h2 class="section-h">本堂課的演進地圖</h2>
+  <div class="figure-box">
+    <span class="figure-tag">ROADMAP</span>
+    <svg viewBox="0 0 880 240" style="width:100%; display:block; margin:0 auto;">
+      <defs>
+        <marker id="arrM" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+          <path d="M0,0 L10,5 L0,10 z" fill="#2b2419"/>
+        </marker>
+      </defs>
+      <g class="node" data-title="RNN" data-tip="Recurrent Neural Network。最早能處理序列的架構。靠 hidden state 把過去資訊往後傳。但長序列會梯度消失。">
+        <rect x="20" y="80" width="100" height="60" fill="#faf3e3" stroke="#2b2419" stroke-width="2"/>
+        <text x="70" y="105" text-anchor="middle" font-family="Fraunces" font-weight="700" font-size="18">RNN</text>
+        <text x="70" y="125" text-anchor="middle" font-size="11" font-style="italic" fill="#5a4f3e">1986</text>
+      </g>
+      <line x1="125" y1="110" x2="180" y2="110" stroke="#2b2419" stroke-width="1.5" marker-end="url(#arrM)"/>
+      <g class="node" data-title="LSTM" data-tip="Long Short-Term Memory（1997）。引入 cell state 和三個 gate，解決長序列梯度問題。直到 2017 年都是序列模型主流。">
+        <rect x="180" y="80" width="100" height="60" fill="#faf3e3" stroke="#2b2419" stroke-width="2"/>
+        <text x="230" y="105" text-anchor="middle" font-family="Fraunces" font-weight="700" font-size="18">LSTM</text>
+        <text x="230" y="125" text-anchor="middle" font-size="11" font-style="italic" fill="#5a4f3e">1997</text>
+      </g>
+      <line x1="285" y1="110" x2="380" y2="110" stroke="#2b2419" stroke-width="1.5" marker-end="url(#arrM)"/>
+      <g class="node" data-title="ELMo" data-tip="Embeddings from Language Models（2018）。biLSTM 的最後輝煌，首次提出『contextualized embedding』 — 同一個字在不同句子裡有不同向量。">
+        <rect x="180" y="20" width="100" height="50" fill="#d28a8a" stroke="#2b2419" stroke-width="2"/>
+        <text x="230" y="42" text-anchor="middle" font-family="Fraunces" font-weight="700" font-size="16">ELMo</text>
+        <text x="230" y="58" text-anchor="middle" font-size="10" font-style="italic">biLSTM 最後光輝</text>
+      </g>
+      <line x1="230" y1="80" x2="230" y2="70" stroke="#8b7e68" stroke-width="1" stroke-dasharray="3,3"/>
+      <g class="node" data-title="Transformer" data-tip="Attention Is All You Need（2017）。完全丟掉 RNN，只用 self-attention。可以平行運算，長距離依賴一步到位。現代所有 LLM 的基礎。">
+        <rect x="380" y="80" width="120" height="60" fill="#3f5d3a" stroke="#2b2419" stroke-width="2"/>
+        <text x="440" y="105" text-anchor="middle" fill="#faf3e3" font-family="Fraunces" font-weight="700" font-size="18">Transformer</text>
+        <text x="440" y="125" text-anchor="middle" fill="#faf3e3" font-size="11" font-style="italic">2017</text>
+      </g>
+      <line x1="505" y1="95" x2="600" y2="50" stroke="#2b2419" stroke-width="1.5" marker-end="url(#arrM)"/>
+      <line x1="505" y1="125" x2="600" y2="170" stroke="#2b2419" stroke-width="1.5" marker-end="url(#arrM)"/>
+      <g class="node" data-title="BERT" data-tip="Bidirectional Encoder Representations from Transformers（2018）。Encoder-only。雙向 self-attention + Masked LM 訓練。擅長理解類任務。">
+        <rect x="600" y="20" width="100" height="60" fill="#c98e2b" stroke="#2b2419" stroke-width="2"/>
+        <text x="650" y="45" text-anchor="middle" font-family="Fraunces" font-weight="700" font-size="18">BERT</text>
+        <text x="650" y="62" text-anchor="middle" font-size="10" font-style="italic">Encoder-only · 理解</text>
+      </g>
+      <g class="node" data-title="GPT" data-tip="Generative Pre-trained Transformer（2018+）。Decoder-only。從左到右預測下一個字。後來變成所有 LLM（ChatGPT、Llama、Claude）的主流路線。">
+        <rect x="600" y="140" width="100" height="60" fill="#2f5b75" stroke="#2b2419" stroke-width="2"/>
+        <text x="650" y="165" text-anchor="middle" fill="#faf3e3" font-family="Fraunces" font-weight="700" font-size="18">GPT</text>
+        <text x="650" y="182" text-anchor="middle" fill="#faf3e3" font-size="10" font-style="italic">Decoder-only · 生成</text>
+      </g>
+      <line x1="705" y1="50" x2="780" y2="105" stroke="#2b2419" stroke-width="1.5" marker-end="url(#arrM)"/>
+      <line x1="705" y1="170" x2="780" y2="115" stroke="#2b2419" stroke-width="1.5" marker-end="url(#arrM)"/>
+      <g class="node" data-title="多模態模型" data-tip="CLIP / BLIP / LLaVA 等。把不同模態（圖、文、音）壓到同一個向量空間，然後用 Transformer 處理。">
+        <rect x="780" y="80" width="90" height="60" fill="#b6432a" stroke="#2b2419" stroke-width="2"/>
+        <text x="825" y="105" text-anchor="middle" fill="#faf3e3" font-family="Fraunces" font-weight="700" font-size="14">多模態</text>
+        <text x="825" y="125" text-anchor="middle" fill="#faf3e3" font-size="10" font-style="italic">CLIP/BLIP/LLaVA</text>
+      </g>
+      <text x="440" y="220" text-anchor="middle" font-style="italic" font-size="13" fill="#5a4f3e">從「記憶」到「注意力」，再到「跨模態對齊」 — 整個故事的脈絡</text>
+    </svg>
+    <div class="figure-cap">圖 0.2 — 演進地圖（每個方塊都可 hover）</div>
+  </div>
+
+  <div class="callout" data-label="如何使用本網頁">
+    <p style="margin:6px 0; font-size:14px;">
+      • <strong>頂部 tabs</strong> 直接跳到任何章節 ；<strong>底部箭頭</strong> 順序往下走，<strong>左右鍵盤</strong> 也能切換<br/>
+      • <strong>所有 <span style="border-bottom:1.5px dashed var(--accent-red);">虛線標記的詞</span> 跟圖中元素都可以 hover</strong>，會出現詳細解釋<br/>
+      • 互動 demo 在 <strong>RNN/LSTM/Self-Attention</strong> 三頁都有，可以親自玩
+    </p>
+  </div>
+</section>
+
+
+<!-- ============ PAGE 1 — RNN ============ -->
+<section class="page" data-page="1">
+  <div class="page-header">
+    <div class="page-num">01</div>
+    <div>
+      <h1 class="page-title">RNN — 加一條「自己連到自己」的線</h1>
+      <div class="page-sub">Recurrent Neural Network · 1986</div>
+    </div>
+  </div>
+
+  <p class="page-tagline">「讓網路擁有記憶 — 這個想法簡單到令人感動。」</p>
+
+  <h2 class="section-h">核心想法</h2>
+  <p class="body-p">
+    普通的神經網路是「輸入 → 隱藏層 → 輸出」，資訊只往前流。RNN 做了一件很簡單的事：<strong>把上一個時間點的隱藏層輸出，當作這一個時間點的額外輸入</strong>。
+    這條多出來的線，就是所謂的 <span class="hov" data-title="Recurrent Connection" data-tip="循環連接。網路的某一層輸出會回流到自己（或前一層），讓資訊可以在時間軸上往後傳遞。這是 RNN 名字的由來。">recurrent connection</span>。
+  </p>
+
+  <h2 class="section-h">把 RNN 攤開來看</h2>
+  <div class="figure-box">
+    <span class="figure-tag">UNFOLD</span>
+    <svg viewBox="0 0 820 280" style="width:100%; display:block;">
+      <defs>
+        <marker id="arr1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+          <path d="M0,0 L10,5 L0,10 z" fill="#2b2419"/>
+        </marker>
+        <marker id="arrR" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+          <path d="M0,0 L10,5 L0,10 z" fill="#b6432a"/>
+        </marker>
+      </defs>
+      <text x="100" y="20" text-anchor="middle" font-family="Fraunces" font-weight="700" font-size="14">折疊版</text>
+      <g transform="translate(60,40)">
+        <rect class="node rnn-cell-anim" x="20" y="80" width="80" height="60" fill="#faf3e3" stroke="#2b2419" stroke-width="2" data-title="RNN Cell" data-tip="同一個 cell（同一組權重 W）在每個時間步都被使用。這就是『權重共享』 — 不管字出現在哪個位置，處理它的方式都一樣。"/>
+        <text x="60" y="115" text-anchor="middle" font-family="Fraunces" font-weight="700" font-size="14">RNN</text>
+        <path d="M 100,100 C 140,80 140,140 100,120" stroke="#b6432a" stroke-width="2" fill="none" marker-end="url(#arrR)" class="node" data-title="Recurrent loop" data-tip="這條紅色的線就是『循環連接』。hidden state 自己連回自己 — 看起來像個圓圈，這就是 RNN 名字裡 'Recurrent' 的由來。"/>
+        <text x="155" y="110" font-size="11" font-style="italic" fill="#b6432a">h_t → h_{t+1}</text>
+        <line x1="60" y1="180" x2="60" y2="140" stroke="#2b2419" stroke-width="1.5" marker-end="url(#arr1)"/>
+        <text x="60" y="195" text-anchor="middle" font-family="JetBrains Mono" font-size="12">x_t</text>
+        <line x1="60" y1="80" x2="60" y2="40" stroke="#2b2419" stroke-width="1.5" marker-end="url(#arr1)"/>
+        <text x="60" y="35" text-anchor="middle" font-family="JetBrains Mono" font-size="12">y_t</text>
+      </g>
+      <text x="290" y="140" font-family="Fraunces" font-style="italic" font-size="14" fill="#5a4f3e">攤開 →</text>
+      <text x="600" y="20" text-anchor="middle" font-family="Fraunces" font-weight="700" font-size="14">攤開後（在時間軸上）</text>
+      <g transform="translate(340,40)">
+        <g>
+          <rect class="node rnn-cell-anim" x="20" y="80" width="80" height="60" fill="#faf3e3" stroke="#2b2419" stroke-width="2" data-title="t=1 的 RNN Cell" data-tip="第一個時間步。它的輸入是 x₁ 和 h₀（初始 hidden state，通常是零向量）。輸出 h₁ 會傳給下一步。"/>
+          <text x="60" y="115" text-anchor="middle" font-family="Fraunces" font-size="13">cell</text>
+          <line x1="60" y1="160" x2="60" y2="140" stroke="#2b2419" stroke-width="1.5" marker-end="url(#arr1)"/>
+          <text x="60" y="175" text-anchor="middle" font-family="JetBrains Mono" font-size="11">x₁</text>
+          <text x="60" y="190" text-anchor="middle" font-size="10" font-style="italic" fill="#5a4f3e">"我"</text>
+          <line x1="60" y1="80" x2="60" y2="60" stroke="#2b2419" stroke-width="1.5" marker-end="url(#arr1)"/>
+          <text x="60" y="55" text-anchor="middle" font-family="JetBrains Mono" font-size="11">y₁</text>
+        </g>
+        <g transform="translate(110,0)">
+          <rect class="node rnn-cell-anim" x="20" y="80" width="80" height="60" fill="#faf3e3" stroke="#2b2419" stroke-width="2" data-title="t=2 的 RNN Cell" data-tip="第二步。注意它跟左邊的 cell 是『同一個』 — 共享同一組權重。資訊透過 h₁ 從上一步傳進來。"/>
+          <text x="60" y="115" text-anchor="middle" font-family="Fraunces" font-size="13">cell</text>
+          <line x1="60" y1="160" x2="60" y2="140" stroke="#2b2419" stroke-width="1.5" marker-end="url(#arr1)"/>
+          <text x="60" y="175" text-anchor="middle" font-family="JetBrains Mono" font-size="11">x₂</text>
+          <text x="60" y="190" text-anchor="middle" font-size="10" font-style="italic" fill="#5a4f3e">"今天"</text>
+          <line x1="60" y1="80" x2="60" y2="60" stroke="#2b2419" stroke-width="1.5" marker-end="url(#arr1)"/>
+          <text x="60" y="55" text-anchor="middle" font-family="JetBrains Mono" font-size="11">y₂</text>
+        </g>
+        <g transform="translate(220,0)">
+          <rect class="node rnn-cell-anim" x="20" y="80" width="80" height="60" fill="#faf3e3" stroke="#2b2419" stroke-width="2"/>
+          <text x="60" y="115" text-anchor="middle" font-family="Fraunces" font-size="13">cell</text>
+          <line x1="60" y1="160" x2="60" y2="140" stroke="#2b2419" stroke-width="1.5" marker-end="url(#arr1)"/>
+          <text x="60" y="175" text-anchor="middle" font-family="JetBrains Mono" font-size="11">x₃</text>
+          <text x="60" y="190" text-anchor="middle" font-size="10" font-style="italic" fill="#5a4f3e">"很"</text>
+          <line x1="60" y1="80" x2="60" y2="60" stroke="#2b2419" stroke-width="1.5" marker-end="url(#arr1)"/>
+          <text x="60" y="55" text-anchor="middle" font-family="JetBrains Mono" font-size="11">y₃</text>
+        </g>
+        <g transform="translate(330,0)">
+          <rect class="node rnn-cell-anim" x="20" y="80" width="80" height="60" fill="#faf3e3" stroke="#2b2419" stroke-width="2"/>
+          <text x="60" y="115" text-anchor="middle" font-family="Fraunces" font-size="13">cell</text>
+          <line x1="60" y1="160" x2="60" y2="140" stroke="#2b2419" stroke-width="1.5" marker-end="url(#arr1)"/>
+          <text x="60" y="175" text-anchor="middle" font-family="JetBrains Mono" font-size="11">x₄</text>
+          <text x="60" y="190" text-anchor="middle" font-size="10" font-style="italic" fill="#5a4f3e">"開心"</text>
+          <line x1="60" y1="80" x2="60" y2="60" stroke="#2b2419" stroke-width="1.5" marker-end="url(#arr1)"/>
+          <text x="60" y="55" text-anchor="middle" font-family="JetBrains Mono" font-size="11">y₄</text>
+        </g>
+        <path id="rnnFlowPath" d="M 100,110 L 350,110" stroke="#b6432a" stroke-width="2" fill="none" marker-end="url(#arrR)" class="node" data-title="hidden state 流動" data-tip="記憶沿著紅線往後傳。每次傳遞都會經過矩陣 W_hh 的乘法。序列愈長，乘法次數愈多 → 梯度消失/爆炸。"/>
+        <!-- 流動小圓點 — 只用 SMIL animateMotion，效能不錯 -->
+        <circle r="4" fill="#b6432a">
+          <animateMotion dur="3s" repeatCount="indefinite" path="M 100,110 L 350,110"/>
+          <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.05;0.95;1" dur="3s" repeatCount="indefinite"/>
+        </circle>
+      </g>
+    </svg>
+    <div class="figure-cap">圖 1.1 — RNN 折疊 vs 攤開（注意紅色小圓點：hidden state 在時間軸上的傳遞）</div>
+  </div>
+
+  <h2 class="section-h">數學長這樣</h2>
+  <p class="body-p"><strong>① 更新 hidden state：</strong></p>
+  <div class="eq-block">
+    <span class="hov" data-title="hₜ" data-tip="第 t 步的 hidden state — 模型『目前的記憶』。維度通常是 128~1024。">h_t</span>
+    = tanh(
+    <span class="hov" data-title="W_xh" data-tip="把『輸入 x』投影到 hidden 空間的權重矩陣。所有時間步共享同一個。">W_xh</span> ·
+    <span class="hov" data-title="xₜ" data-tip="第 t 步的輸入。例如句子的第 t 個字的 word embedding。">x_t</span> +
+    <span class="hov" data-title="W_hh" data-tip="把『上一步記憶』投影到新記憶空間的權重矩陣。這是 RNN 的核心 — 也是梯度問題的元兇，因為它會被反覆相乘。">W_hh</span> ·
+    <span class="hov" data-title="hₜ₋₁" data-tip="上一步的 hidden state。第一步 t=1 時通常設為零向量。">h_{t-1}</span> +
+    <span class="hov" data-title="b_h" data-tip="偏置項（bias）。神經網路的標配，讓模型可以平移輸出。">b_h</span>
+    )
+  </div>
+
+  <p class="body-p"><strong>② 產生輸出：</strong></p>
+  <div class="eq-block">
+    <span class="hov" data-title="yₜ" data-tip="第 t 步的輸出。可以是分類的 logits、下一個字的機率分布等。">y_t</span>
+    =
+    <span class="hov" data-title="W_hy" data-tip="把 hidden state 轉成輸出空間的權重。例如做語言模型時，輸出空間是整個詞彙表（vocabulary），維度可能上萬。">W_hy</span>
+    · h_t + b_y
+  </div>
+
+  <h2 class="section-h">兩個重要觀念</h2>
+  <div class="callout" data-label="① 權重共享">
+    <p class="body-p" style="margin:0;">
+      RNN 處理一句 10 個字的句子，<strong>不是用 10 組不同的權重</strong>，而是<span class="hd-under">同一組</span> W_xh, W_hh, W_hy 用 10 次。
+      這跟 CNN 的 kernel 共享是同樣的精神 — 不管字出現在哪個位置，處理它的方式都應該一樣。<br/><br/>
+      <em style="color:var(--ink-soft);">→ 結論：RNN 可以處理任意長度的輸入，因為參數量跟序列長度無關。</em>
+    </p>
+  </div>
+
+  <div class="callout" data-label="② BPTT">
+    <p class="body-p" style="margin:0;">
+      訓練 RNN 的方法叫做 <span class="hov" data-title="Backpropagation Through Time" data-tip="把 RNN 在時間軸上攤開，變成一個很深的前饋網路，然後用普通反向傳播去算梯度。深度 = 序列長度。">「時間上的反向傳播」</span>。
+      把 RNN 在時間軸攤開（如上圖右），就會變成一個很深的前饋網路 — 然後用一般的反向傳播算梯度就好。
+    </p>
+  </div>
+
+  <h2 class="section-h">RNN 的致命傷 — 梯度消失/爆炸</h2>
+  <p class="body-p">
+    當序列很長，反向傳播要經過很多層 W_hh 的乘法。<br/>
+    想像一下：如果 W_hh 的某個 <span class="hov" data-title="Eigenvalue" data-tip="特徵值。一個矩陣反覆作用在向量上時，向量會被沿著特徵向量方向縮放，縮放比例就是特徵值。">eigenvalue</span> 是 0.9：
+  </p>
+  <div class="eq-block">0.9¹⁰ ≈ 0.35　　0.9³⁰ ≈ 0.04　　0.9⁵⁰ ≈ 0.005　← 梯度消失</div>
+  <div class="eq-block">1.1¹⁰ ≈ 2.6　　1.1³⁰ ≈ 17.4　　1.1⁵⁰ ≈ 117　← 梯度爆炸</div>
+  <p class="body-p">
+    結論：RNN 在實務上很難記住超過 10~20 步以前的資訊。下面這個小 demo 給你直接看數字。
+  </p>
+
+  <!-- ===== DEMO 1: 梯度消失模擬器 ===== -->
+  <div class="demo-panel">
+    <h3 class="demo-title">梯度消失/爆炸 互動模擬器</h3>
+    <p style="font-size:14px; margin:0 0 12px; color:var(--ink-soft);">
+      拉動 slider 改變權重大小（W_hh 的 eigenvalue）和序列長度，看看梯度在 BPTT 過程中會變成什麼樣子。
+    </p>
+    <div class="demo-controls">
+      <div class="ctrl-group">
+        <label>權重大小 W (eigenvalue)</label>
+        <input type="range" id="gradW" min="0.5" max="1.5" step="0.01" value="0.9"/>
+        <span class="ctrl-value" id="gradWVal">0.90</span>
+      </div>
+      <div class="ctrl-group">
+        <label>序列長度 T</label>
+        <input type="range" id="gradT" min="5" max="100" step="1" value="30"/>
+        <span class="ctrl-value" id="gradTVal">30</span>
+      </div>
+    </div>
+    <svg id="gradSvg" viewBox="0 0 700 240" style="width:100%; background:var(--bg-soft); border:1px solid var(--line-strong);"></svg>
+    <div id="gradMsg" style="margin-top:8px; font-style:italic; color:var(--accent-red); font-size:14px;"></div>
+  </div>
+
+  <div class="accordion">
+    <div class="accordion-header">具體計算例子：RNN 處理「好開心」</div>
+    <div class="accordion-body">
+      <p class="body-p">假設 hidden size = 2，embedding size = 2：</p>
+      <p class="body-p">
+        字的 embedding：好=[1, 0]、開=[0, 1]、心=[1, 1]<br/>
+        W_xh = [[0.5, 0.3], [0.2, 0.7]]<br/>
+        W_hh = [[0.1, 0.4], [0.6, 0.2]]<br/>
+        初始 h₀ = [0, 0]
+      </p>
+      <div class="step-viz">
+        <div class="step-row highlight">
+          <div class="step-num">1</div>
+          <div>
+            <div class="step-content">t=1 讀到「好」，x₁=[1, 0]</div>
+            <div class="step-explain">h₁ = tanh(W_xh·[1,0] + W_hh·[0,0]) = tanh([0.5, 0.2]) = [0.46, 0.20]</div>
+          </div>
+        </div>
+        <div class="step-row">
+          <div class="step-num">2</div>
+          <div>
+            <div class="step-content">t=2 讀到「開」，x₂=[0, 1]</div>
+            <div class="step-explain">h₂ = tanh([0.3, 0.7] + [0.126, 0.316]) = tanh([0.426, 1.016]) = [0.40, 0.77]</div>
+          </div>
+        </div>
+        <div class="step-row">
+          <div class="step-num">3</div>
+          <div>
+            <div class="step-content">t=3 讀到「心」，x₃=[1, 1]</div>
+            <div class="step-explain">h₃ = tanh(W_xh·[1,1] + W_hh·[0.40, 0.77]) — h₃ 包含了三個字的全部資訊</div>
+          </div>
+        </div>
+      </div>
+      <p class="body-p">注意 h₂ 裡面同時包含了「好」和「開」的資訊 — 這就是 RNN 的「記憶」。到 h₃ 時，三個字的語意全部被壓縮在一個 2 維向量裡。</p>
+    </div>
+  </div>
+
+  <div class="quiz-panel" data-quiz="rnn1">
+    <div class="quiz-question">RNN 的 hidden state h_t 同時包含了哪些資訊？</div>
+    <div class="quiz-options">
+      <div class="quiz-option" data-correct="true">從 t=1 到 t 的所有輸入的摘要</div>
+      <div class="quiz-option">只有當前時間步 t 的輸入</div>
+      <div class="quiz-option">未來所有時間步的輸入</div>
+      <div class="quiz-option">整個 batch 的平均值</div>
+    </div>
+    <div class="quiz-feedback">正確！h_t 是從第一步到目前為止所有輸入的壓縮摘要。這也是為什麼序列太長時，早期的資訊會被「壓碎」（梯度消失的直觀解釋）。</div>
+  </div>
+
+  <p class="page-tagline">這個梯度問題就是 LSTM 要解決的事情。</p>
+</section>
+
+
+<!-- ============ PAGE 2 — LSTM ============ -->
+<section class="page" data-page="2">
+  <div class="page-header">
+    <div class="page-num">02</div>
+    <div>
+      <h1 class="page-title">LSTM — 給模型一條「高速公路」</h1>
+      <div class="page-sub">Long Short-Term Memory · Hochreiter &amp; Schmidhuber, 1997</div>
+    </div>
+  </div>
+
+  <p class="page-tagline">「與其反覆改寫記憶，不如另外開一條路讓它幾乎原封不動傳下去。」</p>
+
+  <h2 class="section-h">核心 insight</h2>
+  <p class="body-p">
+    LSTM 的關鍵想法是：與其讓記憶被反覆 matrix multiply 搞到消失，不如<strong>另外開一條通道</strong>，讓記憶可以幾乎原封不動地一路傳下去，<strong>只在必要的時候才修改它</strong>。
+    這條額外的通道就是 <span class="hov" data-title="Cell State C_t" data-tip="LSTM 的『主要記憶體』。它在時間軸上幾乎是直接傳遞的（只做加法和元素相乘），這就是它能避免梯度消失的關鍵。">cell state</span>。
+  </p>
+
+  <h2 class="section-h">LSTM Cell — 完整解剖圖</h2>
+  <div class="figure-box">
+    <span class="figure-tag">ANATOMY</span>
+    <svg viewBox="0 0 880 360" style="width:100%; display:block;">
+      <defs>
+        <marker id="arrL" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+          <path d="M0,0 L10,5 L0,10 z" fill="#2b2419"/>
+        </marker>
+        <marker id="arrLR" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+          <path d="M0,0 L10,5 L0,10 z" fill="#b6432a"/>
+        </marker>
+      </defs>
+      <rect x="120" y="40" width="640" height="280" fill="#faf3e3" stroke="#2b2419" stroke-width="2" stroke-dasharray="6,4"/>
+      <text x="130" y="60" font-family="Fraunces" font-style="italic" font-size="12" fill="#5a4f3e">LSTM Cell</text>
+
+      <line x1="40" y1="90" x2="840" y2="90" stroke="#b6432a" stroke-width="3" marker-end="url(#arrLR)" class="node" data-title="Cell State 高速公路" data-tip="紅色這條線就是 cell state C_t。它幾乎不被矩陣相乘，只做選擇性的加法和乘法 → 梯度可以幾乎無損地傳播 → 解決梯度消失。"/>
+      <text x="50" y="80" font-family="JetBrains Mono" font-size="12" fill="#b6432a">C_{t-1}</text>
+      <text x="800" y="80" font-family="JetBrains Mono" font-size="12" fill="#b6432a">C_t</text>
+
+      <!-- 高速公路上的流動圓點 — 三個錯時放發 -->
+      <circle r="4" fill="#b6432a">
+        <animateMotion dur="4s" repeatCount="indefinite" path="M 50,90 L 800,90"/>
+        <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.05;0.95;1" dur="4s" repeatCount="indefinite"/>
+      </circle>
+      <circle r="4" fill="#b6432a">
+        <animateMotion dur="4s" repeatCount="indefinite" begin="1.3s" path="M 50,90 L 800,90"/>
+        <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.05;0.95;1" dur="4s" begin="1.3s" repeatCount="indefinite"/>
+      </circle>
+      <circle r="4" fill="#b6432a">
+        <animateMotion dur="4s" repeatCount="indefinite" begin="2.6s" path="M 50,90 L 800,90"/>
+        <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.05;0.95;1" dur="4s" begin="2.6s" repeatCount="indefinite"/>
+      </circle>
+
+      <g class="node" data-title="Forget Gate f_t" data-tip="forget gate = σ(W_f·[h_{t-1}, x_t] + b_f)。輸出 0~1 的向量，0 代表完全忘掉、1 代表完全保留。會跟舊 cell state 元素相乘。">
+        <circle cx="220" cy="90" r="18" fill="#c98e2b" stroke="#2b2419" stroke-width="2"/>
+        <text x="220" y="95" text-anchor="middle" font-family="JetBrains Mono" font-weight="700" font-size="14">×</text>
+        <text x="220" y="135" text-anchor="middle" font-family="Fraunces" font-weight="700" font-size="13">forget</text>
+        <text x="220" y="150" text-anchor="middle" font-size="11" font-style="italic" fill="#5a4f3e">f_t = σ(...)</text>
+      </g>
+      <line x1="220" y1="170" x2="220" y2="200" stroke="#2b2419" stroke-width="1.5"/>
+
+      <g class="node" data-title="Input Gate i_t" data-tip="input gate = σ(W_i·[h_{t-1}, x_t] + b_i)。決定『要寫入多少』新資訊。">
+        <circle cx="380" cy="90" r="18" fill="#c98e2b" stroke="#2b2419" stroke-width="2"/>
+        <text x="380" y="95" text-anchor="middle" font-family="JetBrains Mono" font-weight="700" font-size="14">+</text>
+        <text x="380" y="135" text-anchor="middle" font-family="Fraunces" font-weight="700" font-size="13">input</text>
+        <text x="380" y="150" text-anchor="middle" font-size="11" font-style="italic" fill="#5a4f3e">i_t · C̃_t</text>
+      </g>
+      <line x1="380" y1="170" x2="380" y2="200" stroke="#2b2419" stroke-width="1.5"/>
+
+      <g class="node" data-title="候選新內容 C̃_t" data-tip="candidate = tanh(W_C·[h_{t-1}, x_t] + b_C)。tanh 把值壓到 -1~1，這是『準備要寫進記憶的新內容』。">
+        <rect x="340" y="220" width="80" height="34" fill="#3f5d3a" stroke="#2b2419" stroke-width="2"/>
+        <text x="380" y="242" text-anchor="middle" fill="#faf3e3" font-family="JetBrains Mono" font-size="12">tanh</text>
+      </g>
+
+      <g class="node" data-title="Output Gate o_t" data-tip="output gate = σ(W_o·[h_{t-1}, x_t] + b_o)。決定 cell state 的哪些部分要露出來變成 hidden state h_t。">
+        <circle cx="600" cy="90" r="18" fill="#c98e2b" stroke="#2b2419" stroke-width="2"/>
+        <text x="600" y="95" text-anchor="middle" font-family="JetBrains Mono" font-weight="700" font-size="13">×</text>
+        <text x="600" y="135" text-anchor="middle" font-family="Fraunces" font-weight="700" font-size="13">output</text>
+        <text x="600" y="150" text-anchor="middle" font-size="11" font-style="italic" fill="#5a4f3e">o_t</text>
+      </g>
+
+      <g class="node" data-title="tanh(C_t)" data-tip="把更新後的 cell state 透過 tanh 壓到 -1~1，再被 output gate 篩選 → 變成 h_t。">
+        <rect x="560" y="170" width="80" height="34" fill="#3f5d3a" stroke="#2b2419" stroke-width="2"/>
+        <text x="600" y="192" text-anchor="middle" fill="#faf3e3" font-family="JetBrains Mono" font-size="12">tanh</text>
+      </g>
+      <line x1="600" y1="108" x2="600" y2="170" stroke="#2b2419" stroke-width="1.5" marker-end="url(#arrL)"/>
+
+      <line x1="180" y1="320" x2="700" y2="320" stroke="#2b2419" stroke-width="1.5"/>
+      <text x="100" y="325" font-family="JetBrains Mono" font-size="12" fill="#2b2419">h_{t-1}, x_t</text>
+
+      <line x1="220" y1="320" x2="220" y2="108" stroke="#8b7e68" stroke-width="1" stroke-dasharray="3,3"/>
+      <line x1="380" y1="320" x2="380" y2="108" stroke="#8b7e68" stroke-width="1" stroke-dasharray="3,3"/>
+      <line x1="380" y1="254" x2="380" y2="280" stroke="#8b7e68" stroke-width="1" stroke-dasharray="3,3"/>
+      <line x1="600" y1="320" x2="600" y2="108" stroke="#8b7e68" stroke-width="1" stroke-dasharray="3,3"/>
+
+      <line x1="640" y1="187" x2="780" y2="187" stroke="#2b2419" stroke-width="1.5" marker-end="url(#arrL)"/>
+      <text x="800" y="192" font-family="JetBrains Mono" font-size="12">h_t</text>
+
+      <g transform="translate(680,220)">
+        <text x="0" y="0" font-family="Fraunces" font-style="italic" font-size="12" fill="#5a4f3e">圖例</text>
+        <circle cx="10" cy="20" r="6" fill="#c98e2b" stroke="#2b2419"/>
+        <text x="22" y="24" font-size="11">Gate</text>
+        <rect x="4" y="34" width="12" height="12" fill="#3f5d3a" stroke="#2b2419"/>
+        <text x="22" y="44" font-size="11">tanh</text>
+        <line x1="0" y1="60" x2="20" y2="60" stroke="#b6432a" stroke-width="3"/>
+        <text x="26" y="63" font-size="11">cell state</text>
+      </g>
+    </svg>
+    <div class="figure-cap">圖 2.1 — LSTM Cell（紅色高速公路上有三顆流動的小點 — 那就是記憶的傳遞）</div>
+  </div>
+
+  <h2 class="section-h">三個 Gate 在做什麼？</h2>
+  <div class="compare-grid">
+    <div class="compare-card">
+      <h4>① Forget Gate</h4>
+      <div class="meta">要「忘掉什麼」</div>
+      <div class="eq" style="font-size:12px;">f_t = σ(W_f · [h_{t-1}, x_t] + b_f)</div>
+      <p class="body-p" style="margin:8px 0;">
+        <span class="hov" data-title="Sigmoid σ" data-tip="把任意實數壓到 0~1 區間。在 gate 裡面，0 代表完全關閉、1 代表完全打開。">Sigmoid</span>
+        把每個維度壓到 0~1。<strong>0 代表完全忘掉，1 代表完全保留。</strong>
+      </p>
+    </div>
+    <div class="compare-card">
+      <h4>② Input Gate</h4>
+      <div class="meta">要「寫入什麼」</div>
+      <div class="eq" style="font-size:12px;">
+        i_t = σ(W_i·[h_{t-1}, x_t]+b_i)<br/>
+        C̃_t = tanh(W_C·[h_{t-1}, x_t]+b_C)
+      </div>
+      <p class="body-p" style="margin:8px 0;">
+        分兩部分：<code>i_t</code> 是「寫入閥門」，<code>C̃_t</code> 是「準備要寫的內容」。
+      </p>
+    </div>
+    <div class="compare-card">
+      <h4>③ Output Gate</h4>
+      <div class="meta">要「輸出什麼」</div>
+      <div class="eq" style="font-size:12px;">
+        o_t = σ(W_o·[h_{t-1}, x_t]+b_o)<br/>
+        h_t = o_t ⊙ tanh(C_t)
+      </div>
+      <p class="body-p" style="margin:8px 0;">
+        cell state 可能存了一堆東西，但這個時間點不見得每個都要輸出。
+      </p>
+    </div>
+  </div>
+
+  <h2 class="section-h">關鍵公式 — Cell State 更新</h2>
+  <div class="eq-block" style="font-size:18px;">
+    C_t = <span style="color:var(--accent-red);">f_t ⊙ C_{t-1}</span> + <span style="color:var(--accent-green);">i_t ⊙ C̃_t</span>
+  </div>
+  <p class="body-p">
+    這個式子有多漂亮 — 注意它是<strong>加法</strong>不是乘法：因為是相加 → 梯度可以沿 cell state 高速公路幾乎無損傳回去 → <strong>不會梯度消失</strong>。
+  </p>
+
+  <!-- ===== DEMO 2: LSTM 時間步動畫 (CSS-based, 順暢) ===== -->
+  <div class="demo-panel">
+    <h3 class="demo-title">LSTM 時間步動畫 — 一步一步看記憶怎麼更新</h3>
+    <p style="font-size:14px; margin:0 0 12px; color:var(--ink-soft);">
+      用「The cat sat on the mat」逐步展示 4 維 cell state 的演化。色塊深淺 = gate 開啟強度，所有過渡都是 GPU 加速的 CSS transition。
+    </p>
+    <div class="demo-controls">
+      <button class="btn" id="lstmPlay">▶ 自動播放</button>
+      <button class="btn secondary" id="lstmStep">下一步 →</button>
+      <button class="btn secondary" id="lstmReset">↺ 重置</button>
+      <span class="ctrl-value" id="lstmStepInfo">step 0 / 6</span>
+    </div>
+
+    <div class="lstm-board">
+      <div class="lstm-row">
+        <div class="lstm-row-label">當前 Token<small>x_t</small></div>
+        <div class="lstm-tokens" id="lstmTokens"></div>
+      </div>
+
+      <div class="lstm-row" style="margin-top:18px;">
+        <div class="lstm-row-label" style="color:var(--accent-red);">Cell State<small>C_t（記憶高速公路）</small></div>
+        <div class="lstm-grid" id="lstmCellGrid"></div>
+      </div>
+      <div style="display:flex; gap:12px;"><div style="width:132px;"></div><div class="lstm-highway" style="flex:1; max-width:600px;"></div></div>
+
+      <div class="lstm-row">
+        <div class="lstm-row-label" style="color:var(--accent-mustard);">Forget Gate<small>f_t（要忘多少）</small></div>
+        <div class="lstm-grid" id="lstmForgetGrid"></div>
+      </div>
+
+      <div class="lstm-row">
+        <div class="lstm-row-label" style="color:var(--accent-green);">Input Gate<small>i_t（要寫多少）</small></div>
+        <div class="lstm-grid" id="lstmInputGrid"></div>
+      </div>
+
+      <div class="lstm-row">
+        <div class="lstm-row-label" style="color:var(--accent-blue);">Output Gate<small>o_t（要露多少）</small></div>
+        <div class="lstm-grid" id="lstmOutputGrid"></div>
+      </div>
+
+      <div class="lstm-row">
+        <div class="lstm-row-label">h_t 輸出<small>= o_t ⊙ tanh(C_t)</small></div>
+        <div class="lstm-grid" id="lstmHiddenGrid"></div>
+      </div>
+    </div>
+    <div id="lstmMsg" style="margin-top:12px; padding:10px 14px; background:var(--bg-soft); border-left:3px solid var(--accent-green); font-style:italic; font-size:14px; min-height:20px;"></div>
+  </div>
+
+  <div class="callout" data-label="一句話總結">
+    <p style="margin:6px 0; font-size:15px;">
+      RNN 是「強迫每個時間點都重寫記憶」，<br/>
+      LSTM 是「<strong>讓模型自己決定什麼時候要改記憶、改哪裡、改成什麼</strong>」。
+    </p>
+  </div>
+
+  <h2 class="section-h">順帶一提：GRU</h2>
+  <p class="body-p">
+    <span class="hov" data-title="GRU" data-tip="Gated Recurrent Unit（2014）。Cho 等人提出。把 forget 和 input gate 合併成 update gate，再加一個 reset gate；cell state 跟 hidden state 也合併。">GRU</span>
+    是 LSTM 的簡化版 — 把三個 gate 合成兩個（update + reset），cell state 和 hidden state 也合併。參數比較少，效果通常跟 LSTM 差不多。
+  </p>
+</section>
+
+
+<!-- ============ PAGE 3 — ELMo ============ -->
+<section class="page" data-page="3">
+  <div class="page-header">
+    <div class="page-num">03</div>
+    <div>
+      <h1 class="page-title">ELMo — biLSTM 的最後光輝</h1>
+      <div class="page-sub">Embeddings from Language Models · Peters et al., 2018</div>
+    </div>
+  </div>
+
+  <p class="page-tagline">「字的向量，應該根據它在句子裡的上下文來決定。」</p>
+
+  <h2 class="section-h">在 ELMo 之前 — Word2Vec / GloVe 的限制</h2>
+  <p class="body-p">在 ELMo 之前，大家用的是 Word2Vec 或 GloVe — <strong>每個字對應一個固定向量</strong>。問題是：</p>
+
+  <div class="two-col">
+    <div class="callout" data-label="例子 1">
+      <p style="margin:0; font-size:14px;">
+        I deposit money in the <strong style="color:var(--accent-red);">bank</strong><br/>
+        <em style="color:var(--ink-soft);">→ "bank" 是金融機構</em>
+      </p>
+    </div>
+    <div class="callout" data-label="例子 2">
+      <p style="margin:0; font-size:14px;">
+        I sit by the river <strong style="color:var(--accent-red);">bank</strong><br/>
+        <em style="color:var(--ink-soft);">→ "bank" 是河岸</em>
+      </p>
+    </div>
+  </div>
+  <p class="body-p">
+    這兩個 "bank" 在 Word2Vec 裡是<strong>完全一樣的向量</strong>，但意思完全不同。<br/>
+    ELMo 的核心想法：<span class="hd-under">字的向量應該根據它在句子裡的上下文動態產生</span>。
+  </p>
+
+  <h2 class="section-h">ELMo 的三層架構</h2>
+
+  <div class="figure-box">
+    <span class="figure-tag">ARCHITECTURE</span>
+    <svg viewBox="0 0 880 480" style="width:100%; display:block;">
+      <defs>
+        <marker id="arrE" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+          <path d="M0,0 L10,5 L0,10 z" fill="#2b2419"/>
+        </marker>
+      </defs>
+
+      <text x="40" y="450" font-family="Fraunces" font-weight="700" font-size="13">輸入</text>
+      <g class="node" data-title="字元級輸入" data-tip="ELMo 不是直接吃 word embedding，而是吃字元（character）。這樣可以處理沒看過的字（OOV）、新造詞、罕見人名等。">
+        <rect x="40" y="420" width="800" height="40" fill="#faf3e3" stroke="#2b2419" stroke-width="2"/>
+        <text x="80" y="445" font-family="JetBrains Mono" font-size="13">b</text>
+        <text x="105" y="445" font-family="JetBrains Mono" font-size="13">a</text>
+        <text x="130" y="445" font-family="JetBrains Mono" font-size="13">n</text>
+        <text x="155" y="445" font-family="JetBrains Mono" font-size="13">k</text>
+        <text x="200" y="445" font-family="JetBrains Mono" font-size="13" fill="#5a4f3e">_</text>
+        <text x="230" y="445" font-family="JetBrains Mono" font-size="13">a</text>
+        <text x="255" y="445" font-family="JetBrains Mono" font-size="13">c</text>
+        <text x="280" y="445" font-family="JetBrains Mono" font-size="13">c</text>
+        <text x="305" y="445" font-family="JetBrains Mono" font-size="13">o</text>
+        <text x="330" y="445" font-family="JetBrains Mono" font-size="13">u</text>
+        <text x="355" y="445" font-family="JetBrains Mono" font-size="13">n</text>
+        <text x="380" y="445" font-family="JetBrains Mono" font-size="13">t</text>
+        <text x="700" y="445" font-style="italic" fill="#8b7e68" font-size="11">(每個字拆成字元)</text>
+      </g>
+
+      <line x1="200" y1="420" x2="200" y2="385" stroke="#2b2419" stroke-width="1.5" marker-end="url(#arrE)"/>
+      <text x="40" y="370" font-family="Fraunces" font-weight="700" font-size="13">第 0 層</text>
+      <g class="node" data-title="Character-level CNN + Highway" data-tip="2048 個 character n-gram conv filter 抓不同長度的字根，再經過 2 層 Highway Network（類似 residual），最後 linear projection 到 512 維。產出 context-independent 的 token representation x_k^LM。">
+        <rect x="40" y="335" width="800" height="50" fill="#c98e2b" stroke="#2b2419" stroke-width="2"/>
+        <text x="440" y="358" text-anchor="middle" font-family="Fraunces" font-weight="700" font-size="14">Character CNN  +  2-layer Highway  +  Linear Projection</text>
+        <text x="440" y="376" text-anchor="middle" font-size="11" font-style="italic">2048 個 char n-gram filter　→　512 維 token representation</text>
+      </g>
+
+      <line x1="440" y1="335" x2="440" y2="295" stroke="#2b2419" stroke-width="1.5" marker-end="url(#arrE)"/>
+      <text x="40" y="280" font-family="Fraunces" font-weight="700" font-size="13">第 1 層</text>
+      <g class="node" data-title="biLSTM Layer 1" data-tip="第一層雙向 LSTM。Forward 從左到右、Backward 從右到左，兩方向的輸出 concat。Hidden 4096 維 → projection 回 512 維。研究發現這層比較會學語法資訊。">
+        <rect x="40" y="240" width="395" height="50" fill="#3f5d3a" stroke="#2b2419" stroke-width="2"/>
+        <text x="237" y="263" text-anchor="middle" fill="#faf3e3" font-family="Fraunces" font-weight="700" font-size="14">→ Forward LSTM (Layer 1)</text>
+        <text x="237" y="280" text-anchor="middle" fill="#faf3e3" font-size="11" font-style="italic">4096 hidden, 512 dim projection</text>
+        <rect x="445" y="240" width="395" height="50" fill="#3f5d3a" stroke="#2b2419" stroke-width="2"/>
+        <text x="642" y="263" text-anchor="middle" fill="#faf3e3" font-family="Fraunces" font-weight="700" font-size="14">← Backward LSTM (Layer 1)</text>
+        <text x="642" y="280" text-anchor="middle" fill="#faf3e3" font-size="11" font-style="italic">4096 hidden, 512 dim projection</text>
+      </g>
+
+      <line x1="237" y1="240" x2="237" y2="200" stroke="#2b2419" stroke-width="1.5" marker-end="url(#arrE)"/>
+      <line x1="642" y1="240" x2="642" y2="200" stroke="#2b2419" stroke-width="1.5" marker-end="url(#arrE)"/>
+      <text x="40" y="185" font-family="Fraunces" font-weight="700" font-size="13">第 2 層</text>
+      <g class="node" data-title="biLSTM Layer 2 (+ Residual)" data-tip="第二層 biLSTM，從第 1 層的輸出再學一次。論文還加了 residual connection（從第 1 層直接連到第 2 層）。研究發現這層比較會學語意資訊。">
+        <rect x="40" y="145" width="395" height="50" fill="#3f5d3a" stroke="#2b2419" stroke-width="2"/>
+        <text x="237" y="168" text-anchor="middle" fill="#faf3e3" font-family="Fraunces" font-weight="700" font-size="14">→ Forward LSTM (Layer 2)</text>
+        <text x="237" y="185" text-anchor="middle" fill="#faf3e3" font-size="11" font-style="italic">+ residual</text>
+        <rect x="445" y="145" width="395" height="50" fill="#3f5d3a" stroke="#2b2419" stroke-width="2"/>
+        <text x="642" y="168" text-anchor="middle" fill="#faf3e3" font-family="Fraunces" font-weight="700" font-size="14">← Backward LSTM (Layer 2)</text>
+        <text x="642" y="185" text-anchor="middle" fill="#faf3e3" font-size="11" font-style="italic">+ residual</text>
+      </g>
+
+      <line x1="237" y1="145" x2="237" y2="105" stroke="#2b2419" stroke-width="1.5" marker-end="url(#arrE)"/>
+      <line x1="642" y1="145" x2="642" y2="105" stroke="#2b2419" stroke-width="1.5" marker-end="url(#arrE)"/>
+      <line x1="440" y1="335" x2="440" y2="105" stroke="#8b7e68" stroke-width="1" stroke-dasharray="4,4"/>
+      <g class="node" data-title="Task-specific 加權合成" data-tip="ELMo embedding = γ · Σ s_j · h_j。s_j 是每層的權重（softmax 過的），會根據下游任務學出來；γ 是整體縮放。低層偏語法、高層偏語意，所以不同任務會給不同權重。">
+        <rect x="40" y="55" width="800" height="50" fill="#b6432a" stroke="#2b2419" stroke-width="2"/>
+        <text x="440" y="78" text-anchor="middle" fill="#faf3e3" font-family="Fraunces" font-weight="700" font-size="14">ELMo = γ · Σ_j  s_j · h_j</text>
+        <text x="440" y="96" text-anchor="middle" fill="#faf3e3" font-size="11" font-style="italic">三層的加權平均（s_j 對下游任務 learnable）</text>
+      </g>
+      <line x1="440" y1="55" x2="440" y2="25" stroke="#2b2419" stroke-width="1.5" marker-end="url(#arrE)"/>
+      <text x="440" y="20" text-anchor="middle" font-family="Fraunces" font-weight="700" font-size="14" fill="#b6432a">Contextualized Embedding</text>
+    </svg>
+    <div class="figure-cap">圖 3.1 — ELMo 完整三層架構</div>
+  </div>
+
+  <h2 class="section-h">數學表達</h2>
+  <p class="body-p">對每個 token <code>t_k</code>，L 層 biLM 會產生 <strong>2L+1 = 5 個</strong> representation（L=2）：</p>
+  <div class="eq-block">R_k = { x_k^{LM},  →h_{k,j}^{LM},  ←h_{k,j}^{LM}  |  j = 1, 2 }</div>
+  <div class="eq-block">ELMo_k^{task} = γ^{task} · Σ_{j=0}^{L} s_j^{task} · h_{k,j}^{LM}</div>
+
+  <h2 class="section-h">不同層學到不同東西</h2>
+  <table class="book">
+    <tbody>
+      <tr><th>層</th><th>傾向學到什麼</th><th>適合的下游任務</th></tr>
+      <tr><td>Char CNN（第 0 層）</td><td>字形、拼寫、字根</td><td>對未知詞的處理</td></tr>
+      <tr><td>biLSTM 第 1 層</td><td>語法（POS、依存關係）</td><td>詞性標註（POS tagging）</td></tr>
+      <tr><td>biLSTM 第 2 層</td><td>語意（word sense）</td><td>語意消歧（WSD）</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout" data-label="但是...">
+    <p style="margin:6px 0; font-size:14px;">
+      ELMo 還是有 LSTM 的限制：<strong>sequential 計算，沒辦法平行化</strong>。在 GPU 時代這是非常奢侈的浪費 — 於是 Transformer 來了。
+    </p>
+  </div>
+</section>
+
+
+<!-- ============ PAGE 4 — Transformer ============ -->
+<section class="page" data-page="4">
+  <div class="page-header">
+    <div class="page-num">04</div>
+    <div>
+      <h1 class="page-title">Transformer — Attention Is All You Need</h1>
+      <div class="page-sub">Vaswani et al., 2017 · 現代所有 LLM 的基礎</div>
+    </div>
+  </div>
+
+  <p class="page-tagline">「把 sequential 計算徹底丟掉。只用 attention 就好。」</p>
+
+  <h2 class="section-h">動機 — 為什麼要丟掉 RNN？</h2>
+  <p class="body-p">
+    LSTM 解決了長序列記憶問題，但<strong>它還是要一個時間步一個時間步算</strong>。在 GPU 時代很不友善。Transformer 的野心：<strong>完全不要 RNN，只用 attention 機制就好</strong>。
+  </p>
+
+  <h2 class="section-h">核心 — Self-Attention</h2>
+
+  <div class="callout" data-label="直觀理解">
+    <p style="margin:6px 0; font-size:14.5px;">
+      讀「The animal didn't cross the street because <strong>it</strong> was too tired」。讀到 "it" 的時候，你的腦袋會自動回去看：「it 指的是什麼？」然後發現它指 "animal"。
+    </p>
+    <p style="margin:6px 0; font-size:14.5px;">
+      Self-attention 就是讓<strong>每個字都去看句子裡所有其他字，然後決定要從哪些字「拿資訊」過來組合成自己的新表示</strong>。
+    </p>
+  </div>
+
+  <h2 class="section-h">Q, K, V — 圖書館比喻</h2>
+  <div class="compare-grid">
+    <div class="compare-card" style="background:#faf3e3;">
+      <h4 style="color:var(--accent-blue);">Query (Q)</h4>
+      <div class="meta">「我在找什麼」</div>
+      <p style="font-size:13px;">當前 token 想要找的資訊類型 — 像是你在 Google 打的搜尋字。</p>
+    </div>
+    <div class="compare-card" style="background:#faf3e3;">
+      <h4 style="color:var(--accent-green);">Key (K)</h4>
+      <div class="meta">「我有什麼可以被找」</div>
+      <p style="font-size:13px;">每個 token 對外的「索引標籤」 — 像是書的標題、tag。</p>
+    </div>
+    <div class="compare-card" style="background:#faf3e3;">
+      <h4 style="color:var(--accent-red);">Value (V)</h4>
+      <div class="meta">「如果有人找我，我給他什麼」</div>
+      <p style="font-size:13px;">實際的資訊內容 — 像是書的真正內容。</p>
+    </div>
+  </div>
+
+  <h2 class="section-h">Attention 公式拆解</h2>
+  <div class="eq-block" style="font-size:18px;">
+    Attention(Q, K, V) = softmax( Q · K<sup>T</sup> / √d_k ) · V
+  </div>
+
+  <div class="figure-box">
+    <span class="figure-tag">STEP-BY-STEP</span>
+    <svg viewBox="0 0 880 280" style="width:100%; display:block;">
+      <g class="node" data-title="Step 1: Q · K^T" data-tip="每個 query 跟每個 key 做內積。結果是一個 N×N 的相似度矩陣 — 第 (i,j) 格代表『token i 對 token j 的注意力原始分數』。">
+        <rect x="20" y="40" width="180" height="180" fill="#faf3e3" stroke="#2b2419" stroke-width="2"/>
+        <text x="110" y="30" text-anchor="middle" font-family="Fraunces" font-weight="700" font-size="14">① Q · K^T</text>
+        <text x="110" y="115" text-anchor="middle" font-family="JetBrains Mono" font-size="13">[N × d_k] · [d_k × N]</text>
+        <text x="110" y="135" text-anchor="middle" font-family="JetBrains Mono" font-size="13">= [N × N]</text>
+        <text x="110" y="180" text-anchor="middle" font-style="italic" font-size="11" fill="#5a4f3e">每個 query 對每個 key</text>
+        <text x="110" y="195" text-anchor="middle" font-style="italic" font-size="11" fill="#5a4f3e">的內積（相似度）</text>
+      </g>
+      <text x="220" y="135" text-anchor="middle" font-size="20" fill="#2b2419">→</text>
+      <g class="node" data-title="Step 2: 除以 √d_k" data-tip="d_k 是 key 的維度。當維度大時，內積值會變很大，softmax 會飽和。除以 √d_k 把內積縮回合理範圍。">
+        <rect x="240" y="40" width="180" height="180" fill="#ebe0c8" stroke="#2b2419" stroke-width="2"/>
+        <text x="330" y="30" text-anchor="middle" font-family="Fraunces" font-weight="700" font-size="14">② ÷ √d_k</text>
+        <text x="330" y="125" text-anchor="middle" font-family="JetBrains Mono" font-size="14">scale</text>
+        <text x="330" y="180" text-anchor="middle" font-style="italic" font-size="11" fill="#5a4f3e">避免內積太大</text>
+        <text x="330" y="195" text-anchor="middle" font-style="italic" font-size="11" fill="#5a4f3e">導致 softmax 飽和</text>
+      </g>
+      <text x="440" y="135" text-anchor="middle" font-size="20">→</text>
+      <g class="node" data-title="Step 3: softmax" data-tip="把每一列分數轉成機率分布（總和為 1）。這就是『注意力權重』。">
+        <rect x="460" y="40" width="180" height="180" fill="#c98e2b" stroke="#2b2419" stroke-width="2"/>
+        <text x="550" y="30" text-anchor="middle" font-family="Fraunces" font-weight="700" font-size="14">③ softmax</text>
+        <text x="550" y="115" text-anchor="middle" fill="#2b2419" font-family="JetBrains Mono" font-size="13">attention</text>
+        <text x="550" y="135" text-anchor="middle" fill="#2b2419" font-family="JetBrains Mono" font-size="13">weights</text>
+        <text x="550" y="180" text-anchor="middle" font-style="italic" font-size="11" fill="#2b2419">每列總和 = 1</text>
+      </g>
+      <text x="660" y="135" text-anchor="middle" font-size="20">→</text>
+      <g class="node" data-title="Step 4: 乘上 V" data-tip="把注意力權重乘上 value 矩陣 → 每個 token 的新表示 = 所有 value 的加權平均。">
+        <rect x="680" y="40" width="180" height="180" fill="#3f5d3a" stroke="#2b2419" stroke-width="2"/>
+        <text x="770" y="30" text-anchor="middle" font-family="Fraunces" font-weight="700" font-size="14">④ × V</text>
+        <text x="770" y="115" text-anchor="middle" fill="#faf3e3" font-family="JetBrains Mono" font-size="13">attention · V</text>
+        <text x="770" y="135" text-anchor="middle" fill="#faf3e3" font-family="JetBrains Mono" font-size="13">= output</text>
+        <text x="770" y="180" text-anchor="middle" fill="#faf3e3" font-style="italic" font-size="11">每個位置 = 所有</text>
+        <text x="770" y="195" text-anchor="middle" fill="#faf3e3" font-style="italic" font-size="11">value 的加權和</text>
+      </g>
+      <text x="440" y="265" text-anchor="middle" font-style="italic" font-size="13" fill="#5a4f3e">每個位置的新表示 = 所有位置 value 的加權和，權重由 query-key 相似度決定</text>
+    </svg>
+    <div class="figure-cap">圖 4.1 — Self-Attention 計算的四步拆解</div>
+  </div>
+
+  <h2 class="section-h">Multi-Head Attention — 多重視角</h2>
+  <p class="body-p">
+    只用一個 attention 不夠 — 一個字可能同時要關注「語法上的主詞」、「意義上的相關物」、「位置上的鄰居」。所以 Transformer 用<strong>多個 attention 平行跑</strong>，每個叫一個 "head"。
+  </p>
+  <div class="eq-block">
+    MultiHead(Q,K,V) = Concat(head_1, ..., head_h) · W^O<br/>
+    head_i = Attention(Q·W_i^Q, K·W_i^K, V·W_i^V)
+  </div>
+  <p class="body-p">
+    研究發現：訓練後，不同 head 會自發分工 — 有些學語法依賴、有些學位置鄰近、有些學共指。沒人預先指派誰做什麼，這種「<strong>emergent specialization</strong>」是 Transformer 強大的關鍵之一。下一頁的 demo 你可以親自玩玩看。
+  </p>
+
+  <h2 class="section-h">Positional Encoding</h2>
+  <div class="callout" data-label="問題">
+    <p style="margin:6px 0; font-size:14.5px;">
+      Self-attention 是 <span class="hov" data-title="Permutation-invariant" data-tip="對輸入的順序不敏感。把 token 順序打亂，輸出也不變。">permutation-invariant</span>！「The cat sat on the mat」跟「mat the on sat cat The」對 self-attention 是<strong>一樣的</strong>。
+    </p>
+  </div>
+  <p class="body-p">解法：把位置資訊「<strong>加</strong>」到 input embedding 上。原始 Transformer 用 sin/cos：</p>
+  <div class="eq-block">
+    PE(pos, 2i)  = sin(pos / 10000^{2i/d_model})<br/>
+    PE(pos, 2i+1) = cos(pos / 10000^{2i/d_model})
+  </div>
+  <p class="body-p">
+    後來的 BERT、GPT 改成 <span class="hov" data-title="Learnable Positional Embedding" data-tip="把每個位置當成一個可學的向量。">learnable positional embedding</span>，再後來有 <span class="hov" data-title="RoPE" data-tip="Rotary Position Embedding。把位置資訊編進 query 和 key 的旋轉裡。LLaMA 用這個。">RoPE</span>、<span class="hov" data-title="ALiBi" data-tip="Attention with Linear Biases。直接在 attention score 上加位置 bias。">ALiBi</span> 等更新方法。
+  </p>
+
+  <h2 class="section-h">為什麼 Transformer 這麼成功？</h2>
+  <div class="compare-grid">
+    <div class="compare-card">
+      <h4>① 完全平行化</h4>
+      <p style="font-size:13px;">所有位置可以同時計算 — GPU 吃滿。不像 RNN 要等前一步算完。</p>
+    </div>
+    <div class="compare-card">
+      <h4>② 長距離依賴一步到位</h4>
+      <p style="font-size:13px;">任何兩個位置都直接連接（attention），不用像 RNN 一樣靠記憶慢慢傳。</p>
+    </div>
+    <div class="compare-card">
+      <h4>③ Scalable</h4>
+      <p style="font-size:13px;">層數加深、寬度加寬都能持續變強 — 這是 GPT-3、GPT-4 的基礎。</p>
+    </div>
+  </div>
+</section>
+
+
+<!-- ============ PAGE 5 — Self-Attention 互動 ============ -->
+<section class="page" data-page="5">
+  <div class="page-header">
+    <div class="page-num">05</div>
+    <div>
+      <h1 class="page-title">Self-Attention 互動可視化</h1>
+      <div class="page-sub">親手玩玩看每個字在「看」哪些字</div>
+    </div>
+  </div>
+
+  <p class="page-tagline">「Q、K、V 算出來的注意力權重長什麼樣？玩玩看就知道。」</p>
+
+  <div class="demo-panel">
+    <h3 class="demo-title">Self-Attention 注意力熱力圖</h3>
+    <p style="font-size:14px; margin:0 0 12px; color:var(--ink-soft);">
+      輸入句子（用空格分字），點擊任一個 token 看它對其他 token 的注意力分布。
+      切換不同 head 風格看不同 pattern。所有顏色都用 CSS transition，順暢過渡。
+    </p>
+    <div class="demo-controls">
+      <div class="ctrl-group" style="flex:1; min-width:300px;">
+        <label>輸入句子</label>
+        <input type="text" id="attnInput" value="The cat sat on the mat because it was tired" style="width:100%; min-width:340px;"/>
+      </div>
+      <button class="btn" id="attnRun">▶ 計算注意力</button>
+      <div class="ctrl-group">
+        <label>選擇 head 風格</label>
+        <select id="attnHead" style="padding:6px; border:1.5px solid var(--ink); font-family:inherit; background:var(--paper);">
+          <option value="syntax">Head 1: 句法依賴</option>
+          <option value="position">Head 2: 鄰近位置</option>
+          <option value="coref">Head 3: 共指（it→...）</option>
+          <option value="content">Head 4: 內容相似</option>
+        </select>
+      </div>
+    </div>
+
+    <div id="attnTokens" style="margin:16px 0; padding:12px; background:var(--bg-soft); border:1px dashed var(--line-strong);"></div>
+
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:24px; align-items:flex-start;">
+      <div>
+        <h4 style="font-family:Fraunces; margin:0 0 8px; color:var(--accent-red);">注意力熱力圖（i 列 → j 行）</h4>
+        <div id="attnHeatmap"></div>
+        <p style="font-size:11px; font-style:italic; color:var(--ink-soft); margin-top:8px;">
+          每一列總和為 1。深色 = 注意力高。點任一格切換焦點。
+        </p>
+      </div>
+      <div>
+        <h4 style="font-family:Fraunces; margin:0 0 8px; color:var(--accent-green);">所選 token 的注意力分布</h4>
+        <div id="attnBarsHtml" style="background:var(--paper); padding:12px; border:1px solid var(--line); min-height:240px;"></div>
+        <div id="attnDesc" style="font-size:13px; margin-top:8px; color:var(--ink-soft); font-style:italic; min-height:40px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <h2 class="section-h">三個常見的注意力 pattern</h2>
+  <div class="compare-grid">
+    <div class="compare-card">
+      <h4>對角線 pattern</h4>
+      <p style="font-size:13px;">每個 token 主要注意自己附近的 token。常見於早期層。</p>
+    </div>
+    <div class="compare-card">
+      <h4>共指 pattern</h4>
+      <p style="font-size:13px;">「it」「he」「she」會強烈 attend 到它們指的名詞。</p>
+    </div>
+    <div class="compare-card">
+      <h4>句法依賴 pattern</h4>
+      <p style="font-size:13px;">動詞 attend 主詞、形容詞 attend 修飾的名詞。</p>
+    </div>
+  </div>
+
+  <div class="callout" data-label="重要提醒">
+    <p style="margin:6px 0; font-size:14px;">
+      上面的 demo 用<strong>規則化的模擬</strong>，真正訓練出來的 Transformer 注意力 pattern 更複雜。但你可以從這個 demo 體會核心概念：<strong>Q-K 內積 = token 之間的相關性</strong>。
+    </p>
+  </div>
+</section>
+
+
+<!-- ============ PAGE 6 — BERT vs GPT ============ -->
+<section class="page" data-page="6">
+  <div class="page-header">
+    <div class="page-num">06</div>
+    <div>
+      <h1 class="page-title">BERT vs GPT — 兩條技術路線</h1>
+      <div class="page-sub">Encoder-only vs Decoder-only</div>
+    </div>
+  </div>
+
+  <p class="page-tagline">「Transformer 原本是 encoder-decoder 一起用的，但有時候只需要其中一邊。」</p>
+
+  <div class="figure-box">
+    <span class="figure-tag">SIDE-BY-SIDE</span>
+    <svg viewBox="0 0 880 380" style="width:100%; display:block;">
+      <text x="220" y="30" text-anchor="middle" font-family="Fraunces" font-weight="800" font-size="20" fill="#c98e2b">BERT</text>
+      <text x="220" y="48" text-anchor="middle" font-style="italic" font-size="12" fill="#5a4f3e">Encoder-only · 雙向 · 適合理解</text>
+
+      <g class="node" data-title="BERT 的輸入" data-tip="句子隨機選 15% 的 token 用 [MASK] 取代。">
+        <rect x="60" y="320" width="320" height="34" fill="#faf3e3" stroke="#2b2419" stroke-width="2"/>
+        <text x="220" y="342" text-anchor="middle" font-size="12" font-family="JetBrains Mono">I love [MASK] learning</text>
+      </g>
+
+      <g class="node" data-title="BERT Encoder Stack" data-tip="把 Transformer encoder 疊很多層（base 12 層、large 24 層）。self-attention 是雙向的。">
+        <rect x="60" y="100" width="320" height="200" fill="#c98e2b" stroke="#2b2419" stroke-width="2"/>
+        <text x="220" y="135" text-anchor="middle" font-family="Fraunces" font-weight="700" font-size="16">Encoder × 12 (base)</text>
+        <text x="220" y="155" text-anchor="middle" font-family="Fraunces" font-weight="700" font-size="16">or × 24 (large)</text>
+        <text x="220" y="200" text-anchor="middle" font-size="13" font-style="italic">每個 token 都能看到所有 token</text>
+        <text x="220" y="220" text-anchor="middle" font-family="Fraunces" font-weight="700" font-size="14" fill="#b6432a">↔  雙向 self-attention  ↔</text>
+        <text x="220" y="260" text-anchor="middle" font-size="12" fill="#2b2419">110M params (base)</text>
+        <text x="220" y="278" text-anchor="middle" font-size="12" fill="#2b2419">340M params (large)</text>
+      </g>
+
+      <line x1="220" y1="320" x2="220" y2="300" stroke="#2b2419" stroke-width="1.5"/>
+      <line x1="220" y1="100" x2="220" y2="80" stroke="#2b2419" stroke-width="1.5"/>
+
+      <g class="node" data-title="MLM 訓練目標" data-tip="Masked Language Model — 預測被遮的字是什麼。雙向 attention 可以同時用左邊和右邊的上下文。">
+        <rect x="60" y="50" width="320" height="30" fill="#b6432a" stroke="#2b2419" stroke-width="2"/>
+        <text x="220" y="70" text-anchor="middle" fill="#faf3e3" font-family="Fraunces" font-weight="700" font-size="13">預測 [MASK] = "deep"</text>
+      </g>
+
+      <line x1="440" y1="40" x2="440" y2="370" stroke="#8b7e68" stroke-width="1" stroke-dasharray="4,4"/>
+
+      <text x="660" y="30" text-anchor="middle" font-family="Fraunces" font-weight="800" font-size="20" fill="#2f5b75">GPT</text>
+      <text x="660" y="48" text-anchor="middle" font-style="italic" font-size="12" fill="#5a4f3e">Decoder-only · 單向（causal）· 適合生成</text>
+
+      <g class="node" data-title="GPT 的輸入" data-tip="完整的句子。模型要根據前面已經看到的字，預測下一個字。">
+        <rect x="500" y="320" width="320" height="34" fill="#faf3e3" stroke="#2b2419" stroke-width="2"/>
+        <text x="660" y="342" text-anchor="middle" font-size="12" font-family="JetBrains Mono">I love deep ___</text>
+      </g>
+
+      <g class="node" data-title="GPT Decoder Stack" data-tip="沒有 encoder，所以也沒有 cross-attention，每層只有 masked self-attention + FFN。">
+        <rect x="500" y="100" width="320" height="200" fill="#2f5b75" stroke="#2b2419" stroke-width="2"/>
+        <text x="660" y="135" text-anchor="middle" fill="#faf3e3" font-family="Fraunces" font-weight="700" font-size="16">Decoder × 12 (GPT-2)</text>
+        <text x="660" y="155" text-anchor="middle" fill="#faf3e3" font-family="Fraunces" font-weight="700" font-size="14" font-style="italic">→ 96 (GPT-3)</text>
+        <text x="660" y="200" text-anchor="middle" fill="#faf3e3" font-size="13" font-style="italic">每個 token 只能看到自己跟之前的</text>
+        <text x="660" y="220" text-anchor="middle" font-family="Fraunces" font-weight="700" font-size="14" fill="#c98e2b">→  Causal Mask  →</text>
+        <text x="660" y="260" text-anchor="middle" fill="#faf3e3" font-size="12">沒有 cross-attention</text>
+        <text x="660" y="278" text-anchor="middle" fill="#faf3e3" font-size="12">(因為沒有 encoder)</text>
+      </g>
+
+      <line x1="660" y1="320" x2="660" y2="300" stroke="#2b2419" stroke-width="1.5"/>
+      <line x1="660" y1="100" x2="660" y2="80" stroke="#2b2419" stroke-width="1.5"/>
+
+      <g class="node" data-title="CLM 訓練目標" data-tip="Causal Language Model — 純粹從左到右預測下一個字。">
+        <rect x="500" y="50" width="320" height="30" fill="#b6432a" stroke="#2b2419" stroke-width="2"/>
+        <text x="660" y="70" text-anchor="middle" fill="#faf3e3" font-family="Fraunces" font-weight="700" font-size="13">預測下一個字 = "learning"</text>
+      </g>
+    </svg>
+    <div class="figure-cap">圖 6.1 — BERT vs GPT 核心差異</div>
+  </div>
+
+  <h2 class="section-h">對照表</h2>
+  <table class="book">
+    <tbody>
+      <tr><th></th><th>BERT</th><th>GPT</th></tr>
+      <tr><td><strong>架構</strong></td><td>Encoder-only</td><td>Decoder-only</td></tr>
+      <tr><td><strong>注意力</strong></td>
+        <td><span class="hov" data-title="雙向 attention" data-tip="每個 token 都能看到所有 token，包括自己後面的。">雙向</span></td>
+        <td><span class="hov" data-title="Causal mask" data-tip="把 attention score 中『未來位置』的部分設為 -∞，softmax 後變成 0。">單向（causal mask）</span></td>
+      </tr>
+      <tr><td><strong>訓練目標</strong></td>
+        <td><span class="hov" data-title="MLM + NSP" data-tip="Masked Language Model + Next Sentence Prediction。後來 RoBERTa 證明 NSP 沒什麼用。">MLM + NSP</span></td>
+        <td><span class="hov" data-title="CLM" data-tip="Causal Language Model — 給定前 t-1 個 token，預測第 t 個 token。">預測下一個 token</span></td>
+      </tr>
+      <tr><td><strong>強項</strong></td><td>理解（分類、QA、NER）</td><td>生成（對話、寫作、寫程式）</td></tr>
+      <tr><td><strong>代表後繼</strong></td><td>RoBERTa, DeBERTa, ELECTRA</td><td>GPT-2/3/4, LLaMA, Claude</td></tr>
+    </tbody>
+  </table>
+
+  <h2 class="section-h">為什麼最後 GPT 路線贏了？</h2>
+  <p class="body-p">
+    雖然 BERT 在理解任務上很強，但有一個關鍵差異：<strong>GPT 的訓練目標跟「人類使用語言」更接近</strong>。我們講話、寫文章都是一個字一個字往下產生的，所以 GPT 的能力可以很自然地用在所有任務上。
+  </p>
+
+  <div class="callout" data-label="一個重要的 insight">
+    <p style="margin:6px 0; font-size:14.5px;">
+      <strong>所有 NLP 任務都可以重新表達成「文字接龍」</strong>：<br/><br/>
+      • 翻譯 → "Translate to French: I love you →" 接龍出 "Je t'aime"<br/>
+      • 分類 → "Sentiment of '太爛了': →" 接龍出 "negative"<br/>
+      • 摘要 → "Summarize: <長文章> →" 接龍出摘要<br/>
+      • 問答 → "Q: 太陽從哪裡升起？ A:" 接龍出答案<br/><br/>
+      這就是為什麼現在大家都做 decoder-only 的大模型。
+    </p>
+  </div>
+</section>
+
+
+<!-- ============ PAGE 7 — 多模態 ============ -->
+<section class="page" data-page="7">
+  <div class="page-header">
+    <div class="page-num">07</div>
+    <div>
+      <h1 class="page-title">多模態 — CLIP, BLIP, LLaVA</h1>
+      <div class="page-sub">把不同模態壓到同一個向量空間</div>
+    </div>
+  </div>
+
+  <p class="page-tagline">「多模態的核心其實很簡單：把圖、文、音、影片都壓到同一個向量空間，剩下的就是常見的 ML 任務了。」</p>
+
+  <div class="figure-box">
+    <span class="figure-tag">CORE IDEA</span>
+    <svg viewBox="0 0 880 280" style="width:100%; display:block;">
+      <defs>
+        <marker id="arrM2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+          <path d="M0,0 L10,5 L0,10 z" fill="#2b2419"/>
+        </marker>
+      </defs>
+
+      <g class="node" data-title="圖片輸入" data-tip="原始圖片（RGB pixels）。需要先經過 vision encoder 變成向量才能跟其他模態比較。">
+        <rect x="40" y="40" width="120" height="80" fill="#d28a8a" stroke="#2b2419" stroke-width="2"/>
+        <text x="100" y="70" text-anchor="middle" font-family="Fraunces" font-weight="700" font-size="14">圖片</text>
+        <text x="100" y="92" text-anchor="middle" font-size="11" font-style="italic" fill="#2b2419">RGB tensor</text>
+        <text x="100" y="108" text-anchor="middle" font-size="10" fill="#5a4f3e">[3, 224, 224]</text>
+      </g>
+      <line x1="160" y1="80" x2="220" y2="80" stroke="#2b2419" stroke-width="1.5" marker-end="url(#arrM2)"/>
+
+      <g class="node" data-title="Vision Encoder" data-tip="用 CNN（ResNet）或 ViT 把圖片轉成向量。CLIP 用 ViT-L/14。">
+        <rect x="220" y="40" width="140" height="80" fill="#3f5d3a" stroke="#2b2419" stroke-width="2"/>
+        <text x="290" y="70" text-anchor="middle" fill="#faf3e3" font-family="Fraunces" font-weight="700" font-size="14">Vision Encoder</text>
+        <text x="290" y="92" text-anchor="middle" fill="#faf3e3" font-size="11" font-style="italic">ViT or CNN</text>
+        <text x="290" y="108" text-anchor="middle" fill="#faf3e3" font-size="10">CLIP 用 ViT-L/14</text>
+      </g>
+      <line x1="360" y1="80" x2="460" y2="120" stroke="#2b2419" stroke-width="1.5" marker-end="url(#arrM2)"/>
+
+      <g class="node" data-title="文字輸入" data-tip="原始文字。先 tokenize，再經過 text encoder 轉成向量。">
+        <rect x="40" y="170" width="120" height="80" fill="#2f5b75" stroke="#2b2419" stroke-width="2"/>
+        <text x="100" y="200" text-anchor="middle" fill="#faf3e3" font-family="Fraunces" font-weight="700" font-size="14">文字</text>
+        <text x="100" y="222" text-anchor="middle" fill="#faf3e3" font-size="11" font-style="italic">tokens</text>
+        <text x="100" y="238" text-anchor="middle" fill="#faf3e3" font-size="10">"a cat on the mat"</text>
+      </g>
+      <line x1="160" y1="210" x2="220" y2="210" stroke="#2b2419" stroke-width="1.5" marker-end="url(#arrM2)"/>
+
+      <g class="node" data-title="Text Encoder" data-tip="通常是 Transformer encoder（類似 BERT）。把 tokens 轉成向量。">
+        <rect x="220" y="170" width="140" height="80" fill="#3f5d3a" stroke="#2b2419" stroke-width="2"/>
+        <text x="290" y="200" text-anchor="middle" fill="#faf3e3" font-family="Fraunces" font-weight="700" font-size="14">Text Encoder</text>
+        <text x="290" y="222" text-anchor="middle" fill="#faf3e3" font-size="11" font-style="italic">Transformer</text>
+        <text x="290" y="238" text-anchor="middle" fill="#faf3e3" font-size="10">通常類似 BERT</text>
+      </g>
+      <line x1="360" y1="210" x2="460" y2="170" stroke="#2b2419" stroke-width="1.5" marker-end="url(#arrM2)"/>
+
+      <g class="node" data-title="共用 Embedding Space" data-tip="不管原本是圖還是文，都被壓到同一個向量空間。在這個空間裡，相關的圖文會靠在一起。">
+        <rect x="460" y="100" width="200" height="90" fill="#c98e2b" stroke="#2b2419" stroke-width="3"/>
+        <text x="560" y="135" text-anchor="middle" font-family="Fraunces" font-weight="800" font-size="16">共用</text>
+        <text x="560" y="158" text-anchor="middle" font-family="Fraunces" font-weight="800" font-size="16">Embedding Space</text>
+        <text x="560" y="180" text-anchor="middle" font-size="11" font-style="italic" fill="#5a4f3e">(例：512 維)</text>
+      </g>
+      <line x1="660" y1="145" x2="720" y2="145" stroke="#2b2419" stroke-width="1.5" marker-end="url(#arrM2)"/>
+
+      <g class="node" data-title="下游任務" data-tip="圖跟文都在同一空間，就可以做：檢索、零樣本分類、跨模態問答、圖文生成等。">
+        <rect x="720" y="100" width="140" height="90" fill="#b6432a" stroke="#2b2419" stroke-width="2"/>
+        <text x="790" y="125" text-anchor="middle" fill="#faf3e3" font-family="Fraunces" font-weight="700" font-size="14">下游任務</text>
+        <text x="790" y="148" text-anchor="middle" fill="#faf3e3" font-size="11">檢索 / 分類</text>
+        <text x="790" y="165" text-anchor="middle" fill="#faf3e3" font-size="11">問答 / 生成</text>
+      </g>
+    </svg>
+    <div class="figure-cap">圖 7.1 — 多模態通用架構</div>
+  </div>
+
+  <h2 class="section-h">三個經典模型</h2>
+
+  <h3 style="font-family:Fraunces; font-weight:700; font-size:20px; color:var(--accent-green); margin-top:24px;">① CLIP — Contrastive Language-Image Pre-training (OpenAI 2021)</h3>
+  <p class="body-p">
+    訓練方式叫 <span class="hov" data-title="Contrastive Learning" data-tip="對比學習。給很多 positive pair 和 negative pair，訓練模型把 positive pair 距離拉近、negative pair 拉遠。">contrastive learning</span> — 給 N 對 (圖, 文)，組成 N×N 矩陣，對角線是 positive pair（推近），其他是 negative（推遠）。
+  </p>
+  <p class="body-p">
+    CLIP 訓練完可以做 <span class="hov" data-title="Zero-shot Classification" data-tip="不用額外訓練資料就能做新任務。CLIP 把分類問題變成『找哪個文字描述跟這張圖最像』。">zero-shot classification</span>：把 "a photo of a cat"、"a photo of a dog" 編成文字向量，跟圖片向量算 cosine similarity，誰高分到哪類 — <strong>完全不用為了分類任務再訓練！</strong>
+  </p>
+
+  <h3 style="font-family:Fraunces; font-weight:700; font-size:20px; color:var(--accent-green); margin-top:32px;">② BLIP — Bootstrapping Language-Image Pre-training (Salesforce 2022)</h3>
+  <p class="body-p">
+    CLIP 主要做<strong>理解/檢索</strong>，BLIP 想要連<strong>生成（caption）</strong>也一起做。BLIP 同時訓練三個任務：
+  </p>
+  <table class="book">
+    <tbody>
+      <tr><th>任務</th><th>做什麼</th></tr>
+      <tr><td>ITC（Image-Text Contrastive）</td><td>跟 CLIP 一樣的對比學習</td></tr>
+      <tr><td>ITM（Image-Text Matching）</td><td>給一對圖文，二分類判斷是否匹配</td></tr>
+      <tr><td>LM（Language Modeling）</td><td>看圖片產生 caption（CLIP 沒有這個）</td></tr>
+    </tbody>
+  </table>
+  <p class="body-p">
+    <span class="hov" data-title="BLIP-2 的 Q-Former" data-tip="Querying Transformer。用一組 learnable query 透過 cross-attention 從凍結的 vision encoder 抽最有用的視覺資訊，再餵給凍結的 LLM。">BLIP-2</span> 引入 Q-Former — 用 learnable query 從 vision encoder 抽視覺資訊，再餵給<strong>凍結的 LLM</strong>，省錢又有效。
+  </p>
+
+  <h3 style="font-family:Fraunces; font-weight:700; font-size:20px; color:var(--accent-green); margin-top:32px;">③ LLaVA — Large Language and Vision Assistant (2023)</h3>
+  <div class="figure-box">
+    <span class="figure-tag">LLAVA ARCH</span>
+    <svg viewBox="0 0 880 380" style="width:100%; display:block;">
+      <defs>
+        <marker id="arrLV" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+          <path d="M0,0 L10,5 L0,10 z" fill="#2b2419"/>
+        </marker>
+      </defs>
+
+      <g class="node" data-title="輸入圖片" data-tip="使用者輸入的圖片。送進 CLIP 的 vision encoder。">
+        <rect x="20" y="50" width="100" height="80" fill="#d28a8a" stroke="#2b2419" stroke-width="2"/>
+        <text x="70" y="80" text-anchor="middle" font-family="Fraunces" font-weight="700" font-size="13">圖片</text>
+        <text x="70" y="100" text-anchor="middle" font-size="10" font-style="italic">image</text>
+      </g>
+      <line x1="120" y1="90" x2="160" y2="90" stroke="#2b2419" stroke-width="1.5" marker-end="url(#arrLV)"/>
+
+      <g class="node" data-title="CLIP ViT-L/14（凍結）" data-tip="LLaVA 用凍結的 CLIP ViT 抽圖片特徵。『凍結』就是訓練時不更新它的權重。">
+        <rect x="160" y="50" width="160" height="80" fill="#3f5d3a" stroke="#2b2419" stroke-width="2"/>
+        <text x="240" y="78" text-anchor="middle" fill="#faf3e3" font-family="Fraunces" font-weight="700" font-size="13">CLIP ViT-L/14</text>
+        <text x="240" y="98" text-anchor="middle" fill="#faf3e3" font-size="10" font-style="italic">vision encoder</text>
+        <text x="240" y="118" text-anchor="middle" fill="#c98e2b" font-size="10" font-weight="700">❄ 凍結</text>
+      </g>
+      <line x1="320" y1="90" x2="360" y2="90" stroke="#2b2419" stroke-width="1.5" marker-end="url(#arrLV)"/>
+
+      <g class="node" data-title="Projection Layer（核心）" data-tip="把 CLIP 視覺特徵投影到 LLM 的 embedding 空間。早期是單一 linear，LLaVA-1.5 改成 2 層 MLP。Stage 1 訓練只訓這個。">
+        <rect x="360" y="50" width="160" height="80" fill="#b6432a" stroke="#2b2419" stroke-width="2"/>
+        <text x="440" y="78" text-anchor="middle" fill="#faf3e3" font-family="Fraunces" font-weight="700" font-size="13">Projection</text>
+        <text x="440" y="98" text-anchor="middle" fill="#faf3e3" font-size="10" font-style="italic">linear / MLP</text>
+        <text x="440" y="118" text-anchor="middle" fill="#c98e2b" font-size="10" font-weight="700">🔥 可訓練</text>
+      </g>
+      <line x1="520" y1="90" x2="560" y2="90" stroke="#2b2419" stroke-width="1.5" marker-end="url(#arrLV)"/>
+
+      <g class="node" data-title="視覺 Token" data-tip="投影後的視覺特徵維度跟 LLM 的 word embedding 一樣（如 4096）。可以無縫地跟文字 token 串在一起。">
+        <rect x="560" y="50" width="160" height="80" fill="#c98e2b" stroke="#2b2419" stroke-width="2"/>
+        <text x="640" y="78" text-anchor="middle" font-family="Fraunces" font-weight="700" font-size="13">視覺 Tokens</text>
+        <text x="640" y="98" text-anchor="middle" font-size="10" font-style="italic">[v_1, v_2, ..., v_N]</text>
+        <text x="640" y="118" text-anchor="middle" font-size="10" fill="#5a4f3e">與文字 token 同維度</text>
+      </g>
+
+      <g class="node" data-title="使用者文字 prompt" data-tip="使用者問的問題。經過 tokenizer 變成 token IDs，再查表變成 word embeddings。">
+        <rect x="20" y="180" width="280" height="50" fill="#2f5b75" stroke="#2b2419" stroke-width="2"/>
+        <text x="160" y="205" text-anchor="middle" fill="#faf3e3" font-family="Fraunces" font-weight="700" font-size="13">使用者 prompt</text>
+        <text x="160" y="222" text-anchor="middle" fill="#faf3e3" font-size="11" font-style="italic">"What's in this image?"</text>
+      </g>
+      <line x1="300" y1="205" x2="340" y2="205" stroke="#2b2419" stroke-width="1.5" marker-end="url(#arrLV)"/>
+      <g class="node" data-title="文字 Tokens" data-tip="文字 token 的 word embeddings。會跟視覺 token 串接後一起餵給 LLM。">
+        <rect x="340" y="180" width="180" height="50" fill="#c98e2b" stroke="#2b2419" stroke-width="2"/>
+        <text x="430" y="208" text-anchor="middle" font-family="Fraunces" font-weight="700" font-size="13">文字 Tokens</text>
+      </g>
+
+      <line x1="640" y1="130" x2="640" y2="270" stroke="#2b2419" stroke-width="1.5"/>
+      <line x1="430" y1="230" x2="430" y2="270" stroke="#2b2419" stroke-width="1.5"/>
+      <g class="node" data-title="串接 Concat" data-tip="把視覺 token 和文字 token 直接串成一條序列丟給 LLM。LLM 不知道差別 — 對它來說只是多了一些『特殊的 token』。">
+        <rect x="280" y="270" width="480" height="40" fill="#3f5d3a" stroke="#2b2419" stroke-width="2"/>
+        <text x="520" y="295" text-anchor="middle" fill="#faf3e3" font-family="Fraunces" font-weight="700" font-size="14">[v_1, ..., v_N, w_1, w_2, ..., w_M]   ← 串接</text>
+      </g>
+      <line x1="520" y1="310" x2="520" y2="335" stroke="#2b2419" stroke-width="1.5" marker-end="url(#arrLV)"/>
+
+      <g class="node" data-title="LLM (Vicuna)" data-tip="預訓練好的 LLM。LLaVA 用 Vicuna（LLaMA 的 instruct-tuned 版本）。">
+        <rect x="280" y="335" width="480" height="40" fill="#2f5b75" stroke="#2b2419" stroke-width="2"/>
+        <text x="520" y="362" text-anchor="middle" fill="#faf3e3" font-family="Fraunces" font-weight="700" font-size="15">LLM (LLaMA / Vicuna) → 產生回答</text>
+      </g>
+    </svg>
+    <div class="figure-cap">圖 7.3 — LLaVA 的「視覺翻譯」設計</div>
+  </div>
+
+  <h2 class="section-h">三個模型對照</h2>
+  <table class="book">
+    <tbody>
+      <tr><th></th><th>CLIP</th><th>BLIP</th><th>LLaVA</th></tr>
+      <tr><td><strong>主要能力</strong></td><td>檢索、零樣本分類</td><td>檢索 + 生成 caption</td><td>對話式視覺問答</td></tr>
+      <tr><td><strong>Vision Encoder</strong></td><td>ViT</td><td>ViT</td><td>CLIP ViT（凍結）</td></tr>
+      <tr><td><strong>連接方式</strong></td><td>共享 embedding</td><td>Q-Former (BLIP-2)</td><td>Projection layer</td></tr>
+      <tr><td><strong>哲學</strong></td><td>對齊兩個空間</td><td>多任務聯合訓練</td><td>把視覺翻譯成 LLM 看得懂的「語言」</td></tr>
+    </tbody>
+  </table>
+
+  <h2 class="section-h">融合策略（作業會用到）</h2>
+  <table class="book">
+    <tbody>
+      <tr><th>策略</th><th>說明</th><th>例子</th></tr>
+      <tr>
+        <td><span class="hov" data-title="Early Fusion" data-tip="很早的階段就把不同模態串在一起。模態間互動充分但架構不靈活。">Early Fusion</span></td>
+        <td>很早就把不同模態串起來</td><td>直接 concat 兩種向量丟同一個模型</td>
+      </tr>
+      <tr>
+        <td><span class="hov" data-title="Late Fusion" data-tip="各模態各自處理到最後才合併。模組化、可重用 pretrained 模型。">Late Fusion</span></td>
+        <td>各自處理到最後才合併</td><td>CLIP（兩個 encoder 各跑完才算 similarity）</td>
+      </tr>
+      <tr>
+        <td><span class="hov" data-title="Cross-Attention" data-tip="一個模態的 query 去 attend 另一個模態的 key/value。">Cross-Attention</span></td>
+        <td>一邊的 Q 去 attend 另一邊的 K/V</td><td>Flamingo, BLIP-2 的 Q-Former</td>
+      </tr>
+      <tr>
+        <td><span class="hov" data-title="Unified Token" data-tip="所有模態都變成 token 餵給同一個 Transformer。最簡潔的設計，現在的主流。">Unified Token</span></td>
+        <td>所有模態變成 token 給同一個 Transformer</td><td>LLaVA, GPT-4V</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+
+<!-- ============ PAGE 8 — 作業 ============ -->
+<section class="page" data-page="8">
+  <div class="page-header">
+    <div class="page-num">08</div>
+    <div>
+      <h1 class="page-title">作業 2 — 設計你自己的多模態模型</h1>
+      <div class="page-sub">不是要做 SOTA，是要你「想清楚為什麼這樣設計」</div>
+    </div>
+  </div>
+
+  <div class="stamp" style="top:60px; right:8vw;">HOMEWORK</div>
+
+  <p class="page-tagline">「資料集規模不用大，重點是流程跑得通、設計有思考。」</p>
+
+  <h2 class="section-h">作業要求</h2>
+  <div class="compare-grid">
+    <div class="compare-card">
+      <h4>① 自己建資料集</h4>
+      <p style="font-size:13px;">
+        <strong>不能用</strong> COCO、Flickr 等現成資料集。<br/>
+        規模 30~100 對就夠：自己拍的照 + 描述、影片片段 + 字幕、音樂 + 歌詞、心情日記 + emoji…
+      </p>
+    </div>
+    <div class="compare-card">
+      <h4>② 設計自己的架構</h4>
+      <p style="font-size:13px;">
+        兩個模態自選（圖+文、音+文、影片+字幕…）。選一個融合策略並說明為什麼。可以用 pretrained encoder（CLIP, BERT 都 OK）。
+      </p>
+    </div>
+    <div class="compare-card">
+      <h4>③ 簡短報告</h4>
+      <p style="font-size:13px;">
+        PDF 或 Markdown 都可以。<strong>重點不在 accuracy，在思考過程</strong>。
+      </p>
+    </div>
+  </div>
+
+  <h2 class="section-h">報告必須回答的四個問題</h2>
+  <div class="callout" data-label="Q1">
+    <p style="margin:6px 0; font-size:14.5px;">
+      <strong>為什麼選這兩個模態？</strong> 這個組合可以解什麼問題、有什麼有趣的應用？
+    </p>
+  </div>
+  <div class="callout" data-label="Q2">
+    <p style="margin:6px 0; font-size:14.5px;">
+      <strong>兩個模態怎麼融合？</strong> Early / Late / Cross-attention / Unified Token — 你選哪個？為什麼？這個選擇有什麼 trade-off？
+    </p>
+  </div>
+  <div class="callout" data-label="Q3">
+    <p style="margin:6px 0; font-size:14.5px;">
+      <strong>訓練上遇到什麼問題？怎麼解決的？</strong>（沒遇到問題反而可疑）
+    </p>
+  </div>
+  <div class="callout" data-label="Q4">
+    <p style="margin:6px 0; font-size:14.5px;">
+      <strong>有 demo 結果就放上來</strong>（不管成功失敗）。失敗的 demo 配上分析，比成功但沒思考的 demo 分數還高。
+    </p>
+  </div>
+
+  <h2 class="section-h">起手式建議</h2>
+  <table class="book">
+    <tbody>
+      <tr><th>步驟</th><th>建議</th></tr>
+      <tr><td>① 想題目</td><td>選一個你「真的覺得有趣」的應用 — 動力是最重要的</td></tr>
+      <tr><td>② 收資料</td><td>30~100 對就夠。寧可少而精，不要多而髒</td></tr>
+      <tr><td>③ 切 train/test</td><td>20% 留 test，<strong>千萬別偷看</strong></td></tr>
+      <tr><td>④ 用 pretrained 起步</td><td>CLIP、BERT、ResNet — 不要從零訓練</td></tr>
+      <tr><td>⑤ 先用最簡單的融合</td><td>Late fusion + cosine similarity 是最容易跑通的 baseline</td></tr>
+      <tr><td>⑥ 出問題 → 分析 → 改進</td><td>這個 loop 走幾遍才是學習發生的地方</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout" data-label="評分原則">
+    <p style="margin:6px 0; font-size:14.5px;">
+      重要程度排序：<br/>
+      <strong>① 思考清晰度</strong> &gt; <strong>② 流程完整性</strong> &gt; <strong>③ 創意</strong> &gt; <strong>④ 結果效能</strong><br/><br/>
+      做不出 SOTA 沒關係，<span class="hd-under">不知道自己為什麼這樣做</span>才是大問題。
+    </p>
+  </div>
+
+  <h2 class="section-h">交件方式</h2>
+  <p class="body-p">
+    GitHub repo 包含：(1) 程式碼、(2) 資料集（或下載連結）、(3) 報告 PDF/Markdown、(4) README 寫怎麼跑。<strong>給未來會回來看自己 code 的你，留一份體面的 repo。</strong>
+  </p>
+
+  <p class="page-tagline" style="margin-top:40px;">期待看到你們的設計 — 玩得開心。</p>
+</section>
+
+</main>
+
+<footer class="bottombar">
+  <button class="nav-arrow" id="prevBtn">← 上一頁</button>
+  <div class="nav-center" id="centerLabel">序章 — 為什麼需要序列模型？</div>
+  <button class="nav-arrow" id="nextBtn">下一頁 →</button>
+</footer>
+
+<div class="tip-popup" id="tipPopup"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
