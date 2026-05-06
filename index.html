@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Lec.2 — 序列模型 & 多模態</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,800;1,9..144,500&family=Lora:ital,wght@0,400;0,500;0,600;1,400&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f4ebd9;
+    --bg-soft: #ebe0c8;
+    --paper: #faf3e3;
+    --ink: #2b2419;
+    --ink-soft: #5a4f3e;
+    --ink-faint: #8b7e68;
+    --accent-red: #b6432a;
+    --accent-green: #3f5d3a;
+    --accent-mustard: #c98e2b;
+    --accent-blue: #2f5b75;
+    --line: #c8b896;
+    --shadow: 4px 4px 0 #2b2419;
+    --shadow-soft: 2px 2px 0 #8b7e68;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'Lora', 'Noto Sans TC', Georgia, serif;
+    min-height: 100vh;
+  }
+  body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background:
+      radial-gradient(ellipse at top left, rgba(255,250,235,0.7), transparent 50%),
+      radial-gradient(ellipse at bottom right, rgba(201,142,43,0.06), transparent 50%),
+      var(--bg);
+  }
+  .container {
+    text-align: center;
+    padding: 3rem 2rem;
+    max-width: 640px;
+    width: 100%;
+  }
+  h1 {
+    font-family: 'Fraunces', serif;
+    font-size: 2.4rem;
+    font-weight: 800;
+    margin-bottom: 0.4rem;
+    color: var(--ink);
+  }
+  .subtitle {
+    font-size: 1.1rem;
+    color: var(--ink-soft);
+    margin-bottom: 3rem;
+  }
+  .cards {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+  }
+  .card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    padding: 2.5rem 1.5rem;
+    background: var(--paper);
+    border: 2px solid var(--line);
+    box-shadow: var(--shadow);
+    text-decoration: none;
+    color: var(--ink);
+    transition: transform 0.15s, box-shadow 0.15s;
+  }
+  .card:hover {
+    transform: translate(-2px, -2px);
+    box-shadow: 6px 6px 0 #2b2419;
+  }
+  .card-icon {
+    font-size: 2.8rem;
+    line-height: 1;
+  }
+  .card-title {
+    font-family: 'Fraunces', serif;
+    font-size: 1.3rem;
+    font-weight: 600;
+  }
+  .card-desc {
+    font-size: 0.9rem;
+    color: var(--ink-faint);
+    line-height: 1.5;
+  }
+  .card--web { border-color: var(--accent-blue); }
+  .card--slide { border-color: var(--accent-mustard); }
+
+  @media (max-width: 500px) {
+    .cards { grid-template-columns: 1fr; }
+    h1 { font-size: 1.8rem; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Lec.2</h1>
+  <p class="subtitle">From Sequence Models to Transformers</p>
+  <div class="cards">
+    <a href="/web/" class="card card--web">
+      <div class="card-icon">📖</div>
+      <div class="card-title">互動講義</div>
+      <div class="card-desc">完整圖文內容，含動畫與互動元件</div>
+    </a>
+    <a href="/slide/" class="card card--slide">
+      <div class="card-icon">🎬</div>
+      <div class="card-title">投影片</div>
+      <div class="card-desc">課堂簡報，附講者備忘錄</div>
+    </a>
+  </div>
+</div>
+</body>
+</html>

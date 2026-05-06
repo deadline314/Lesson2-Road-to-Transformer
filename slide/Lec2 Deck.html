@@ -1,0 +1,1880 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<title>Lec.2 — From Sequence Models to Transformers</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<!-- Fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,700;0,9..144,800;0,9..144,900;1,9..144,400;1,9..144,700&family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="animations.css">
+
+<!-- Speaker notes -->
+<script type="application/json" id="speaker-notes">
+[
+  "嗨，大家好，歡迎來到第二講。今天我們要做的事情其實很有野心 — 我會帶大家從最古早的 RNN 開始，一路走到現在當紅的 Transformer、BERT、GPT，甚至最後會聊一下多模態。這條路大概是 2014 年到 2020 年代整個 NLP 領域的故事。我會盡量用直覺去講，數學的部分會一邊講一邊畫，希望大家不會睡著。中間穿插了不少動畫,大家可以盯著看,概念會更直覺。",
+
+  "在我們開始之前，先講一個很簡單的問題 — 為什麼語言這麼難?其實人類處理語言的時候，腦袋會做兩件事:第一是「記住前面說過什麼」，第二是「決定接下來哪個字最有可能」。聽起來簡單，但要讓機器做到這兩件事,我們花了大概十年。這堂課就是在講這十年發生了什麼。",
+
+  "好，先看大綱。我們會分成五大塊:第一塊是序列模型的基本概念,RNN 怎麼運作。第二塊是 LSTM 跟 GRU,解決 RNN 的問題。第三塊講 ELMo,context 的概念開始進來。第四塊是重頭戲 Transformer 跟 Attention 機制。最後一塊是 BERT、GPT 還有多模態的延伸。中間會穿插一些數學跟 code,但我保證每一段都會講人話。",
+
+  "在跳進模型之前，先談一個很重要的概念 — 序列。什麼是序列?簡單講就是「順序有意義的資料」。一句話的字、一段語音的音訊、一首歌的音符,這些都是序列。為什麼順序重要?你看右邊那個例子,「狗咬人」跟「人咬狗」,字一模一樣,但意思完全不同。這就是序列模型要解的問題 — 不只看「有什麼」,還要看「順序」。",
+
+  "好,接下來這張很重要 — tokenization。模型其實不吃文字,它只懂數字。所以我們要先把句子切成 token,再對應到 vocabulary 裡的 ID。這邊用 unbelievable 當例子,BPE 會把它拆成 un / believ / able 三個 subword。為什麼用 subword 不用整個字?因為 word-level vocab 會爆炸,character-level 序列又太長,subword 是最好的折衷,GPT 跟 BERT 都用這個。",
+
+  "切好 token、對應到 ID 之後,下一步是 embedding。每個 ID 透過一個 lookup table,對應到一個高維向量。重點是 — 意思相近的字,在這個向量空間裡會自動聚在一起,king queen man woman 會排成平行四邊形。這個就是著名的 Word2Vec 例子。再強調一次,embedding 才是模型「理解」的真正載體,不是文字本身。",
+
+  "OK 那我們來看第一個正式的模型 — RNN,Recurrent Neural Network。它的核心想法其實很簡單 — 我有一個小小的記憶 h,每次看到新的字 x,我就把這個字跟我記憶中的東西混在一起,得到新的記憶。然後不斷重複這個動作。你可以把它想像成一個人在讀一本書,他每讀一個字,腦袋裡的「理解」就會更新一次。",
+
+  "我們把 RNN 的展開圖畫出來。左邊是壓縮的形式,自己連自己;右邊是展開,你可以看到 timestep 一個接一個。每一格都共用同一組參數 W — 這點很重要,所以 RNN 不管句子多長,模型大小都一樣。這個展開圖是理解 RNN 最關鍵的一張圖,後面講 Transformer 的時候我們會回頭比較,看看為什麼這個結構限制了 RNN。",
+
+  "這張動畫直接讓你看 RNN 怎麼動。上面五個 token 一個接一個閃,代表時間流;下面八根長條代表 hidden state 的能量,每讀一個字就更新一次。注意到沒有,某些維度會突然亮起來,某些會暗下去 — 這就是 hidden state 在「重新分配注意力」。RNN 的精神就是這樣 — 一切都在那條 h 裡面流動。",
+
+  "RNN 雖然漂亮,但它有一個很大的問題,叫做「梯度消失」。簡單講就是 — 你把一個小於 1 的數字一直乘一直乘,它會變得超級小,小到幾乎是零。這對訓練來說是災難 — 句子越長,越前面的字對結果的影響就越接近零,模型根本學不到長距離的依賴。我講一句話的開頭,RNN 走到結尾就忘光了,這個就是 RNN 的痛點。",
+
+  "再用一張動畫補強這個概念。看右邊那顆紅色脈衝,它從 Loss 那端往前傳,代表梯度。你會看到它越走越小,到最前面 x₁ 的時候幾乎消失了。這就是 BPTT (Backprop Through Time) 的問題 — 梯度要逆著時間傳,經過 N 格就被乘 N 次 W。如果 W 的 norm 小於 1,衰減成零;大於 1,就爆炸成 NaN。兩種都很慘。",
+
+  "所以為了解決這個遺忘的問題,LSTM 出現了。LSTM 的全名叫做 Long Short-Term Memory,長短期記憶。它的精神是「我要主動決定什麼要記、什麼要忘」。它引入了三個門 — forget gate 決定忘掉什麼、input gate 決定記什麼、output gate 決定輸出什麼。這三個門都是 sigmoid,值在 0 跟 1 之間,你可以想像成水龍頭,開大開小由模型自己學。",
+
+  "我們來看 LSTM 的數學長相。看起來很多公式,但其實每一條都在做同一件事 — 算一個門,然後用門去 gate 信息流。重點不是要你背公式,而是要看到一個關鍵設計 — cell state C 的更新是「加法」,不是「乘法」。加法讓梯度可以一路傳回去而不會消失,這就是 LSTM 為什麼能記得遠的東西的核心理由。",
+
+  "這張動畫就是把那三個門畫成水閥。你看那三個旋鈕在轉、水流在開大開小 — 那就是 sigmoid 在每個 timestep 動態決定的。Forget gate 控制舊記憶留多少,Input gate 控制新訊息寫多少,Output gate 控制要對外吐多少。所有的門都是模型自己學出來的,沒人手動設定。",
+
+  "GRU 是 LSTM 的簡化版,只有兩個門:reset gate 跟 update gate。參數比 LSTM 少,訓練比較快,但效果在大多數任務上跟 LSTM 差不多。所以實務上,如果你資料不大、想跑快一點,GRU 是不錯的選擇。如果你資料很大、追求極致效能,LSTM 還是經典。當然,2017 年之後,Transformer 出現,這兩個都漸漸退場了,但它們的設計哲學一直影響到今天。",
+
+  "好,現在我們轉到 ELMo。ELMo 全名是 Embeddings from Language Models。在 ELMo 之前,word embedding 像 Word2Vec、GloVe,一個字就是一個固定的向量 — 不管 context 是什麼,「bank」永遠是同一個向量。但這顯然有問題啊,「river bank」跟「bank account」的 bank 意思完全不一樣。ELMo 就是來解決這件事的,它用雙向 LSTM 動態產生 context-dependent 的 embedding。",
+
+  "在 Transformer 出來之前,翻譯是怎麼做的?Sutskever 2014 提出 Seq2Seq — 兩個 RNN 串起來,一個 encoder 把整句中文壓縮成一個 context 向量,另一個 decoder 從那個向量解出英文。這個架構打開了「序列對序列」的範式,但有個明顯的 bottleneck:整句話被壓進一個固定大小的向量,長句訊息一定流失。這個 bottleneck 兩年後被 Bahdanau 用 attention 解掉。",
+
+  "Bahdanau 2015 是 attention 的雛形。他的想法很直覺 — decoder 每生一個字的時候,不要只看那個被壓爛的 context 向量,而是「重新看一次」整個 source,動態算出哪些 source token 跟現在最相關,然後加權求和。score、softmax、weighted sum,這三步驟就是後來 self-attention 的骨架。兩年後,Vaswani 把這個想法推到極致 — 不只 decoder 對 encoder 用,連 encoder 對自己也用。",
+
+  "OK 重頭戲來了 — Transformer。2017 年 Google 發了一篇論文叫 Attention is All You Need,這篇可能是過去十年最重要的一篇論文。它的核心想法很激進 — 我們不要 RNN 了,我不要一個字一個字 sequential 處理,我要「一次看全部」,然後讓模型自己學「哪個字該關注哪個字」。這就是 Self-Attention。",
+
+  "我們先講 Attention 的直覺。想像你在讀一個句子,你要決定「it」指的是什麼。你會在腦袋裡掃一遍前文,然後對某幾個字「特別注意」。Attention 機制就是把這個過程數學化 — 每個字都會問:「我跟其他每個字有多相關?」然後根據相關度去加權平均。整張圖就是看到「it」的時候,模型自動 highlight 到「animal」上,因為 it 指的就是 animal。",
+
+  "Attention 的核心公式長這樣 — Q 乘以 K 的轉置,除以 root d_k,做 softmax,再乘 V。聽起來很複雜,但其實就三件事:第一,算相似度 (Q dot K);第二,正規化 (softmax);第三,加權求和 (乘 V)。Q、K、V 的全名是 Query、Key、Value — 就像查字典:你拿 Query 去找跟哪個 Key 最像,然後拿那個 Key 對應的 Value 出來。",
+
+  "這張動畫把 Q × Kᵀ × V 整個流程視覺化。最左邊紅色矩陣是 Q,黃色是 Kᵀ,兩個相乘得到中間的 attention score 矩陣,你會看到對角線最亮 — 因為每個 token 通常最關注自己。再把這個分數矩陣乘上綠色的 V,就得到最終輸出。整個 attention 就是這四個矩陣相乘,並行度極高,GPU 跑爆。",
+
+  "我們也直接看 code,十幾行 PyTorch 就把 attention 寫完了。看清楚 scale 那一步 — 為什麼要除 root d_k?因為當維度變大,dot product 的 variance 也變大,softmax 容易過於 sharp,梯度會消失。所以要先把 magnitude 拉回來。實務上這個小細節超重要,沒做的話訓練就跑不動。",
+
+  "Multi-Head Attention 是在 self-attention 上再加一層 — 我不只做一次 attention,我做 h 次,每次用不同的 Q、K、V 投影,然後把結果拼起來。為什麼?因為不同的 head 可以學不同類型的關係,有的 head 專注在語法、有的在語意、有的在指代。多個視角合在一起,模型理解就更全面。Transformer 原始論文用 8 個 head,GPT-3 用 96 個。",
+
+  "這張動畫把 multi-head 的 split → merge 流程畫出來。上面四個彩色方塊是 4 個 head,各自學不同的關係 — 語法、語意、指代、距離。每個 head 算完之後,結果往下集合,經過 concat 跟一個輸出投影矩陣 Wᴼ,合成最終輸出。所以 multi-head 不是「比較好的 attention」,而是「同時做多種 attention,再合起來」。",
+
+  "Transformer 的整體架構長這樣,左邊是 Encoder、右邊是 Decoder。Encoder 把輸入編碼成一堆 context-aware 的表示;Decoder 一邊看 Encoder 的輸出、一邊自己 generate 下一個字。每個 block 裡面都有 Multi-Head Attention 加 Feed-Forward,中間用 residual connection 跟 LayerNorm 串起來。這個架構一直沿用到今天,GPT、BERT、T5,通通是它的變形。",
+
+  "順便講一下 block 裡的三個無名英雄 — Residual、LayerNorm、FFN。Residual 是「跳線」,讓梯度有條高速公路直通底層,深層也訓得動。LayerNorm 把每層輸出拉回標準分布,穩定訓練。FFN 是兩層 MLP,負責「處理」資訊,attention 只是「混合」資訊。LLM 大部分的參數其實都在 FFN 裡,不是 attention。沒了這三個,Transformer 根本訓不起來。",
+
+  "因為 Transformer 沒有 RNN 的順序結構,它不知道字的位置。所以我們要手動加 Positional Encoding,告訴模型「這個字是第幾個」。原始論文用 sin 跟 cos 函數,不同維度用不同頻率,這樣模型可以學到相對位置。後來也有人用 learned position embedding,或者更高級的 rotary position (RoPE)。重點是 — 沒有位置資訊,Transformer 就完全失去順序感。",
+
+  "BERT 是 2018 年 Google 出的模型,只用 Encoder。它的訓練方法很聰明 — Masked Language Model,隨機把一些字蓋起來,讓模型猜這些被蓋住的字是什麼。這樣模型就學會了從雙向 context 去理解每個字。BERT 出來之後,基本上把所有 NLP 的 benchmark 屠榜了一遍,從此 fine-tuning 成為主流範式。",
+
+  "用一張動畫示範 MLM。看那個紅色的 [MASK] — 模型看到「The cat sat on the [MASK]」,要從上下文猜出來。下面的長條圖是模型輸出的機率分布,你會看到 mat 跟 floor 的機率最高,因為「sat on the mat」是常見搭配。模型不需要人工標註答案,訓練資料就是「網路上的一堆句子」,自己挖洞自己填。這就是 self-supervised learning 的威力。",
+
+  "GPT 走的是另一條路 — 只用 Decoder,做 autoregressive 的 next-token prediction。給定前面的字,預測下一個字是什麼。聽起來很單純,但 OpenAI 把規模做大,從 GPT-1 到 GPT-2 到 GPT-3 到 GPT-4,展現出來的能力越來越驚人,後來甚至出現 in-context learning 跟 emergent abilities。BERT 跟 GPT 代表了兩種不同的哲學 — 理解 vs 生成。",
+
+  "用動畫看 GPT 怎麼運作 — 給定 context「深度學習很」,模型輸出下一個 token 的機率分布,「有趣」最高、「難」次之、「酷」第三。然後從這個分布裡 sample 一個出來,接到 context 後面,再餵回去重複。整個 LLM 對話、寫作、翻譯,本質上就是這個迴圈在跑幾兆次。簡單到讓人懷疑,但 emergent abilities 就是從這個簡單規則裡長出來的。",
+
+  "順便講一下整個範式的演進。2017 之前是 from scratch,每個任務從零訓練,要大量標註資料。2018 BERT 帶起 pretrain + fine-tune,一次預訓練,各任務只要 fine-tune 幾千筆。2020 GPT-3 之後進入 prompting / in-context learning 時代 — 一個大模型通吃,只要會寫 prompt 就好,連 fine-tune 都不用。標註成本一代一代降到接近零。",
+
+  "我們快速比較一下這兩條路線。BERT 是雙向,適合理解類任務,像 NER、分類、QA;GPT 是單向,適合生成類任務,像對話、寫作、翻譯。BERT 一般要 fine-tune,GPT 越大越靠 prompting 就能解很多事。現在的潮流是 GPT 系勝出 — 因為 generative 的範式可以涵蓋所有任務,只要你會 prompt,任何任務都可以變成 next-token prediction。",
+
+  "再來談 Scaling Laws。Kaplan 2020 跟 Chinchilla 2022 發現一個非常乾淨的現象 — loss 跟模型大小、訓練資料、運算量,在 log-log 圖上呈現直線關係,也就是 power law。這意味著什麼?意味著「變大就會變好」是可預測的,不是運氣。Chinchilla 還告訴我們最佳比例 — 每個參數應配約 20 個訓練 token,否則模型沒吃飽。",
+
+  "Scaling 帶來的副產品就是 emergent abilities — 突現能力。某些能力,在小模型上完全做不到,過了某個規模門檻,「啪」一下就出現,不是漸進的而是相變。Chain-of-Thought、In-Context Learning、Instruction Following、Tool Use,這四個都是典型例子。這也是為什麼大家瘋狂追求 scale — 你不知道下一個臨界點會解鎖什麼能力。",
+
+  "再往外擴一步,Transformer 不只能處理文字,還能處理影像、音訊。ViT 把圖片切成 patch,每個 patch 當成一個 token 餵進 Transformer。CLIP 把圖片跟文字對齊到同一個 embedding 空間,可以做 zero-shot 分類。Whisper 用 Transformer 做語音辨識。這就是「多模態」的世界 — 不同類型的資料,共用同一套架構。Transformer 真的是萬能武器。",
+
+  "最後給大家看 Transformer 在現實世界長什麼樣。對話 (ChatGPT、Claude)、寫程式 (Copilot、Cursor)、搜尋 RAG、語音翻譯 (Whisper)、影像生成 (DALL-E、Sora)、蛋白質結構 (AlphaFold)、推薦系統、agents — 全部都是 Transformer。這套架構在 2017 年只是一篇翻譯論文,8 年後撐起整個 AI 產業。設計的優雅程度讓人嘆為觀止。",
+
+  "回顧一下我們今天走過的路:從 tokenization、embedding 入門,到 RNN 解決序列、LSTM 解決記憶、Seq2Seq 跟 Bahdanau 引入 attention 雛形、ELMo 引入 context、到 Transformer 用 self-attention 一次看全部、再到 BERT 跟 GPT 兩種範式、scaling laws 與 emergent abilities、最後到多模態與真實應用。這條時間軸大概是從 2014 到現在。每一步都是站在前一步的肩膀上,解決前一步的問題。希望大家對這條脈絡有了直覺。",
+
+  "最後是這次的作業。三個部分:第一,實作一個簡單的 RNN 做文字分類,理解 sequential processing。第二,用 PyTorch 寫一個 mini self-attention,理解 Q/K/V 的運作。第三,用 HuggingFace 的 BERT 做一個下游任務的 fine-tuning。Deadline 是兩週後,有問題隨時 Slack 我或來 office hour。今天就到這裡,謝謝大家!"
+]
+</script>
+
+<!-- React + Babel for Tweaks panel -->
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<!-- Deck stage -->
+<script src="deck-stage.js"></script>
+
+</head>
+<body>
+
+<deck-stage>
+
+  <!-- Slide 1: Title -->
+  <section data-screen-label="01 Title" style="background: var(--bg); display: flex; flex-direction: column; justify-content: space-between; padding: 90px 110px;">
+    <div class="dot-pattern"></div>
+    <div style="display:flex; justify-content: space-between; align-items: flex-start; position: relative; z-index: 1;">
+      <div class="anim-slide-right anim-d1" style="font-family: 'Fraunces', serif; font-weight: 700; font-style: italic; font-size: 28px; color: var(--accent-red);">
+        ✦ Lecture 2 · NLP Fundamentals
+      </div>
+      <div class="anim-slide-right anim-d2" style="font-family: 'JetBrains Mono', monospace; font-size: 20px; color: var(--ink-faint); letter-spacing: 0.15em;">
+        2024 · WEEK 02
+      </div>
+    </div>
+
+    <div style="position: relative; z-index: 1;">
+      <div class="anim-slide-up anim-d2" style="font-family: 'Fraunces', serif; font-style: italic; font-weight: 400; font-size: 38px; color: var(--ink-soft); margin-bottom: 24px;">
+        從序列模型到 Transformer
+      </div>
+      <h1 class="h-disp anim-slide-up anim-d3" style="margin-bottom: 28px;">
+        From Sequence<br>
+        Models to <span style="color: var(--accent-red); font-style: italic;">Transformers</span>
+      </h1>
+      <div class="anim-slide-up anim-d5" style="display: flex; align-items: center; gap: 28px; margin-top: 40px;">
+        <div style="height: 4px; width: 120px; background: var(--ink);"></div>
+        <div class="body-l" style="font-style: italic;">
+          RNN · LSTM · ELMo · Self-Attention · BERT · GPT · Multimodal
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex; justify-content: space-between; align-items: flex-end; position: relative; z-index: 1;">
+      <div class="anim-fade anim-d6">
+        <div style="font-family: 'Fraunces', serif; font-weight: 800; font-size: 24px;">Prof. Lecture Notes</div>
+        <div class="body-m" style="font-size: 22px; margin-top: 4px;">Deep Learning for NLP · 90 min</div>
+      </div>
+      <div class="stamp anim-pop anim-d7" style="position: static; transform: rotate(-6deg);">
+        Lec.02 / 14
+      </div>
+    </div>
+  </section>
+
+  <!-- Slide 2: Hook -->
+  <section data-screen-label="02 Hook">
+    <div class="slide-tag anim-fade anim-d1">Why · 為什麼</div>
+    <div style="margin-top: 140px; max-width: 1500px;">
+      <h2 class="h-1 anim-slide-up anim-d2" style="margin-bottom: 60px;">
+        為什麼<br>
+        <span class="hl-y">語言</span>這麼難?
+      </h2>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 60px; margin-top: 80px;">
+        <div class="anim-slide-up anim-d3">
+          <div style="font-family: 'Fraunces', serif; font-weight: 700; font-size: 36px; color: var(--accent-red); margin-bottom: 20px;">① 記住</div>
+          <div class="body-l">人讀一句話的時候,會把<span class="hl-y">前面看過的字</span>放在腦袋裡。</div>
+        </div>
+        <div class="anim-slide-up anim-d4">
+          <div style="font-family: 'Fraunces', serif; font-weight: 700; font-size: 36px; color: var(--accent-green); margin-bottom: 20px;">② 預測</div>
+          <div class="body-l">然後依靠這些記憶,<span class="hl-y">猜下一個字</span>最有可能是什麼。</div>
+        </div>
+      </div>
+      <div class="tagline anim-slide-up anim-d5" style="margin-top: 80px;">
+        這堂課,就是在講機器怎麼學會做這兩件事 — 而且花了我們十年。
+      </div>
+    </div>
+    <div class="slide-num">02</div>
+    <div class="slide-foot">Lec.2 — Sequence to Transformers</div>
+  </section>
+
+  <!-- Slide 3: Agenda -->
+  <section data-screen-label="03 Agenda">
+    <div class="slide-tag anim-fade anim-d1">Agenda · 大綱</div>
+    <h2 class="h-1 anim-slide-up anim-d2" style="margin-top: 140px; margin-bottom: 80px;">
+      今天的<span style="font-style: italic;">路線圖</span>
+    </h2>
+    <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 30px; flex: 1; align-content: start;">
+      <!-- five blocks -->
+      <div class="anim-slide-up anim-d3" style="border-top: 6px solid var(--accent-red); padding-top: 24px;">
+        <div style="font-family: 'JetBrains Mono', monospace; color: var(--accent-red); font-size: 22px; margin-bottom: 12px;">PART 01</div>
+        <div class="h-3" style="margin-bottom: 14px;">RNN</div>
+        <div class="body-m" style="font-size: 22px;">序列怎麼建模、為什麼會忘記。</div>
+      </div>
+      <div class="anim-slide-up anim-d4" style="border-top: 6px solid var(--accent-mustard); padding-top: 24px;">
+        <div style="font-family: 'JetBrains Mono', monospace; color: var(--accent-mustard); font-size: 22px; margin-bottom: 12px;">PART 02</div>
+        <div class="h-3" style="margin-bottom: 14px;">LSTM<br>GRU</div>
+        <div class="body-m" style="font-size: 22px;">用「門」控制記憶與遺忘。</div>
+      </div>
+      <div class="anim-slide-up anim-d5" style="border-top: 6px solid var(--accent-green); padding-top: 24px;">
+        <div style="font-family: 'JetBrains Mono', monospace; color: var(--accent-green); font-size: 22px; margin-bottom: 12px;">PART 03</div>
+        <div class="h-3" style="margin-bottom: 14px;">ELMo</div>
+        <div class="body-m" style="font-size: 22px;">同一個字,不同情境,不同意思。</div>
+      </div>
+      <div class="anim-slide-up anim-d6" style="border-top: 6px solid var(--accent-blue); padding-top: 24px;">
+        <div style="font-family: 'JetBrains Mono', monospace; color: var(--accent-blue); font-size: 22px; margin-bottom: 12px;">PART 04</div>
+        <div class="h-3" style="margin-bottom: 14px;">Transformer<br>+ Attention</div>
+        <div class="body-m" style="font-size: 22px;">不再 sequential — 一次看全部。</div>
+      </div>
+      <div class="anim-slide-up anim-d7" style="border-top: 6px solid var(--accent-pink); padding-top: 24px;">
+        <div style="font-family: 'JetBrains Mono', monospace; color: var(--accent-pink); font-size: 22px; margin-bottom: 12px;">PART 05</div>
+        <div class="h-3" style="margin-bottom: 14px;">BERT/GPT<br>Multimodal</div>
+        <div class="body-m" style="font-size: 22px;">理解 vs 生成,跨模態的延伸。</div>
+      </div>
+    </div>
+    <div class="anim-fade anim-d8" style="margin-top: 60px; font-style: italic; font-family: 'Fraunces', serif; font-size: 26px; color: var(--ink-faint);">
+      ✦ 中間穿插數學 + code,但每一段都會講人話。
+    </div>
+    <div class="slide-num">03</div>
+  </section>
+
+  <!-- Slide 4: What is a sequence -->
+  <section data-screen-label="04 What is a Sequence">
+    <div class="slide-tag anim-fade anim-d1">Foundations · 基礎</div>
+    <h2 class="h-1 anim-slide-up anim-d2" style="margin-top: 130px;">
+      什麼是<span class="hl-y">序列</span>?
+    </h2>
+    <div class="body-l anim-slide-up anim-d3" style="margin-top: 30px; max-width: 1100px;">
+      簡單講就是 — <em>順序有意義</em>的資料。換個位子,意思就變了。
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1fr 1.2fr; gap: 90px; margin-top: 90px; align-items: center;">
+      <!-- Left: examples -->
+      <div>
+        <div class="anim-slide-right anim-d4" style="display: flex; align-items: center; gap: 24px; margin-bottom: 28px;">
+          <div style="width: 60px; height: 60px; background: var(--accent-red); border: 3px solid var(--ink); display: flex; align-items: center; justify-content: center; font-family: 'Fraunces', serif; font-weight: 800; font-size: 28px; color: var(--paper); box-shadow: var(--shadow-soft);">字</div>
+          <div class="h-3">一句話的字</div>
+        </div>
+        <div class="anim-slide-right anim-d5" style="display: flex; align-items: center; gap: 24px; margin-bottom: 28px;">
+          <div style="width: 60px; height: 60px; background: var(--accent-green); border: 3px solid var(--ink); display: flex; align-items: center; justify-content: center; font-family: 'Fraunces', serif; font-weight: 800; font-size: 28px; color: var(--paper); box-shadow: var(--shadow-soft);">音</div>
+          <div class="h-3">一段語音波形</div>
+        </div>
+        <div class="anim-slide-right anim-d6" style="display: flex; align-items: center; gap: 24px; margin-bottom: 28px;">
+          <div style="width: 60px; height: 60px; background: var(--accent-blue); border: 3px solid var(--ink); display: flex; align-items: center; justify-content: center; font-family: 'Fraunces', serif; font-weight: 800; font-size: 28px; color: var(--paper); box-shadow: var(--shadow-soft);">♪</div>
+          <div class="h-3">一首歌的音符</div>
+        </div>
+        <div class="anim-slide-right anim-d7" style="display: flex; align-items: center; gap: 24px;">
+          <div style="width: 60px; height: 60px; background: var(--accent-mustard); border: 3px solid var(--ink); display: flex; align-items: center; justify-content: center; font-family: 'Fraunces', serif; font-weight: 800; font-size: 28px; color: var(--ink); box-shadow: var(--shadow-soft);">$</div>
+          <div class="h-3">一段股價的走勢</div>
+        </div>
+      </div>
+
+      <!-- Right: contrast example -->
+      <div class="card anim-pop anim-d5" style="background: var(--paper); padding: 50px;">
+        <div class="card-label" style="background: var(--accent-red); color: var(--paper);">EXAMPLE · 例子</div>
+        <div style="margin-top: 30px; font-family: 'Fraunces', serif; font-weight: 800; font-size: 88px; color: var(--ink); letter-spacing: -0.02em; line-height: 1.05;">
+          狗咬人<br>
+          <span style="color: var(--accent-red);">≠</span><br>
+          人咬狗
+        </div>
+        <div class="body-m" style="margin-top: 30px; font-size: 28px; font-style: italic;">
+          字一模一樣,順序不同,新聞價值差一萬倍。
+        </div>
+      </div>
+    </div>
+
+    <div class="slide-num">04</div>
+  </section>
+
+  <!-- Slide 4b: Tokenization animation -->
+  <section data-screen-label="04b Tokenization">
+    <div class="slide-tag anim-fade anim-d1">Foundations · Tokenization</div>
+    <h2 class="h-1 anim-slide-up anim-d2" style="margin-top: 120px;">
+      第一步:把文字<span style="font-style: italic;">切成 token</span>
+    </h2>
+    <div class="body-l anim-slide-up anim-d3" style="margin-top: 20px; max-width: 1500px;">
+      模型不吃文字,吃<span class="hl-y">數字</span>。所以要先把句子拆成小單元 — token,再對應到 ID。
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 80px; margin-top: 80px; flex: 1; align-items: center;">
+      <div class="anim-pop anim-d4 tokenize-demo">
+        <div class="word">unbelievable</div>
+        <div class="arrow">↓ BPE</div>
+        <div class="pieces">
+          <div class="pc">un</div>
+          <div class="pc">believ</div>
+          <div class="pc">able</div>
+        </div>
+        <div class="arrow">↓ vocab lookup</div>
+        <div>
+          <span class="id-chip">2473</span>
+          <span class="id-chip">8910</span>
+          <span class="id-chip">1042</span>
+        </div>
+      </div>
+
+      <div class="anim-slide-left anim-d5" style="background: var(--paper); border: 3px solid var(--ink); padding: 50px; box-shadow: var(--shadow);">
+        <div class="card-label">三種主流策略</div>
+        <div style="display: flex; flex-direction: column; gap: 22px; margin-top: 24px;">
+          <div>
+            <div class="body-m" style="font-weight:700; color: var(--accent-red);">Word</div>
+            <div class="body-s">每個字一個 token。簡單,但 vocab 爆炸,OOV 嚴重。</div>
+          </div>
+          <div>
+            <div class="body-m" style="font-weight:700; color: var(--accent-blue);">Character</div>
+            <div class="body-s">每個字元一個 token。沒有 OOV,但序列超長。</div>
+          </div>
+          <div>
+            <div class="body-m" style="font-weight:700; color: var(--accent-green);">Subword (BPE / WordPiece)</div>
+            <div class="body-s">折衷方案,GPT、BERT 都用。常見字保留,罕見字拆解。</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="slide-num">04b</div>
+  </section>
+
+  <!-- Slide 4c: Embedding space animation -->
+  <section data-screen-label="04c Embedding Space">
+    <div class="slide-tag anim-fade anim-d1">Foundations · Embedding</div>
+    <h2 class="h-1 anim-slide-up anim-d2" style="margin-top: 120px;">
+      Token ID → <span style="font-style: italic;">向量空間</span>
+    </h2>
+    <div class="body-l anim-slide-up anim-d3" style="margin-top: 20px; max-width: 1500px;">
+      每個 token ID 對應一個<span class="hl-r">高維向量</span>。意思相近的字,在空間中也會靠近。
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1.2fr 1fr; gap: 70px; margin-top: 60px; flex: 1; align-items: center;">
+      <div class="anim-pop anim-d4 embed-space" style="position: relative;">
+        <!-- King/Queen/Man/Woman cluster -->
+        <div class="pt" style="background: var(--accent-red); top: 30%; left: 25%; animation-delay: 0s;"></div>
+        <span style="position: absolute; top: 28%; left: 28%; font-family: 'JetBrains Mono', monospace; font-size: 18px; font-weight: 700;">king</span>
+
+        <div class="pt" style="background: var(--accent-red); top: 60%; left: 28%; animation-delay: 0.5s;"></div>
+        <span style="position: absolute; top: 58%; left: 31%; font-family: 'JetBrains Mono', monospace; font-size: 18px; font-weight: 700;">man</span>
+
+        <div class="pt" style="background: var(--accent-mustard); top: 30%; left: 60%; animation-delay: 1s;"></div>
+        <span style="position: absolute; top: 28%; left: 63%; font-family: 'JetBrains Mono', monospace; font-size: 18px; font-weight: 700;">queen</span>
+
+        <div class="pt" style="background: var(--accent-mustard); top: 60%; left: 63%; animation-delay: 1.5s;"></div>
+        <span style="position: absolute; top: 58%; left: 66%; font-family: 'JetBrains Mono', monospace; font-size: 18px; font-weight: 700;">woman</span>
+
+        <!-- Animal cluster -->
+        <div class="pt" style="background: var(--accent-green); top: 78%; left: 78%; animation-delay: 0.3s;"></div>
+        <span style="position: absolute; top: 76%; left: 81%; font-family: 'JetBrains Mono', monospace; font-size: 18px; font-weight: 700;">cat</span>
+
+        <div class="pt" style="background: var(--accent-green); top: 82%; left: 84%; animation-delay: 0.8s;"></div>
+        <span style="position: absolute; top: 86%; left: 87%; font-family: 'JetBrains Mono', monospace; font-size: 18px; font-weight: 700;">dog</span>
+
+        <!-- arrows showing parallel relationship -->
+        <svg style="position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none;" viewBox="0 0 100 100" preserveAspectRatio="none">
+          <line x1="27" y1="32" x2="62" y2="32" stroke="#c34a3a" stroke-width="0.5" stroke-dasharray="2 1"/>
+          <line x1="30" y1="62" x2="65" y2="62" stroke="#c34a3a" stroke-width="0.5" stroke-dasharray="2 1"/>
+        </svg>
+      </div>
+
+      <div class="anim-slide-left anim-d5">
+        <div class="eq-big" style="margin-bottom: 30px;">
+          king − man + woman ≈ <span style="color: var(--accent-red);">queen</span>
+        </div>
+        <div class="body-m" style="margin-top: 24px;">
+          這就是著名的 Word2Vec 例子 — 向量加減反映語意關係。
+        </div>
+        <div class="body-m" style="margin-top: 16px;">
+          高維空間 (300 ~ 4096 維) 才是模型「理解」的真正載體。
+        </div>
+      </div>
+    </div>
+    <div class="slide-num">04c</div>
+  </section>
+
+  <!-- Slide 5: RNN intuition -->
+  <section data-screen-label="05 RNN Intuition">
+    <div class="slide-tag anim-fade anim-d1">Part 01 · RNN</div>
+    <div style="display: grid; grid-template-columns: 1fr 1.4fr; gap: 80px; margin-top: 100px; flex: 1; align-items: center;">
+      <div>
+        <div style="font-family: 'JetBrains Mono', monospace; color: var(--accent-red); font-size: 22px; margin-bottom: 16px;" class="anim-fade anim-d2">MODEL · 模型 #01</div>
+        <h2 class="h-1 anim-slide-up anim-d3" style="margin-bottom: 30px;">
+          RNN<br>
+          <span style="font-size: 48px; color: var(--ink-soft); font-style: italic;">Recurrent Neural Network</span>
+        </h2>
+        <div class="body-l anim-slide-up anim-d4" style="margin-top: 40px;">
+          想像你在<span class="hl-y">讀一本書</span> — 每讀一個字,腦袋裡的「理解」就更新一次。
+        </div>
+        <div class="body-l anim-slide-up anim-d5" style="margin-top: 24px;">
+          RNN 做的事一模一樣:<br>把<span class="hl-r">新的字</span>跟<span class="hl-g">舊的記憶</span>混起來,得到新的記憶。
+        </div>
+      </div>
+
+      <!-- Right: simple diagram of recurrence -->
+      <div class="anim-pop anim-d5" style="background: var(--paper); border: 3px solid var(--ink); padding: 60px 50px; box-shadow: var(--shadow); position: relative;">
+        <div class="card-label">CORE LOOP · 核心迴圈</div>
+        <svg viewBox="0 0 700 360" style="width: 100%; height: auto; margin-top: 20px;">
+          <!-- Box for h_t -->
+          <rect x="280" y="120" width="140" height="120" rx="14" fill="#c98e2b" stroke="#2b2419" stroke-width="3"/>
+          <text x="350" y="170" text-anchor="middle" font-family="Fraunces, serif" font-weight="800" font-size="44" fill="#2b2419">h</text>
+          <text x="350" y="200" text-anchor="middle" font-family="Lora, serif" font-style="italic" font-size="16" fill="#2b2419">memory · 記憶</text>
+
+          <!-- input arrow -->
+          <line x1="80" y1="180" x2="270" y2="180" stroke="#2b2419" stroke-width="3" marker-end="url(#arr)"/>
+          <text x="60" y="186" text-anchor="end" font-family="Fraunces, serif" font-weight="800" font-size="36" fill="#b6432a">x</text>
+          <text x="60" y="210" text-anchor="end" font-family="Lora, serif" font-style="italic" font-size="16" fill="#5a4f3e">new word</text>
+
+          <!-- output arrow -->
+          <line x1="430" y1="180" x2="620" y2="180" stroke="#2b2419" stroke-width="3" marker-end="url(#arr)"/>
+          <text x="640" y="186" font-family="Fraunces, serif" font-weight="800" font-size="36" fill="#3f5d3a">y</text>
+          <text x="640" y="210" font-family="Lora, serif" font-style="italic" font-size="16" fill="#5a4f3e">prediction</text>
+
+          <!-- self-loop -->
+          <path d="M 350 120 C 350 40, 500 40, 500 120 C 500 200, 430 200, 420 180"
+                fill="none" stroke="#b6432a" stroke-width="3" stroke-dasharray="8 6" marker-end="url(#arrR)" class="flow-line"/>
+          <text x="510" y="80" font-family="Fraunces, serif" font-style="italic" font-size="20" fill="#b6432a">loop · 自己接自己</text>
+
+          <defs>
+            <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+              <path d="M0,0 L10,5 L0,10 z" fill="#2b2419"/>
+            </marker>
+            <marker id="arrR" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+              <path d="M0,0 L10,5 L0,10 z" fill="#b6432a"/>
+            </marker>
+          </defs>
+        </svg>
+        <div class="mono" style="margin-top: 30px; font-size: 26px; text-align: center; background: var(--bg-soft); padding: 16px; border: 2px solid var(--ink);">
+          h<sub>t</sub> = tanh( W<sub>x</sub>·x<sub>t</sub> + W<sub>h</sub>·h<sub>t-1</sub> )
+        </div>
+      </div>
+    </div>
+    <div class="slide-num">05</div>
+  </section>
+
+  <!-- Slide 6: RNN unrolled -->
+  <section data-screen-label="06 RNN Unrolled">
+    <div class="slide-tag anim-fade anim-d1">Part 01 · RNN</div>
+    <h2 class="h-1 anim-slide-up anim-d2" style="margin-top: 130px;">
+      把它<span style="font-style: italic;">展開</span>來看
+    </h2>
+    <div class="body-l anim-slide-up anim-d3" style="margin-top: 24px; max-width: 1500px;">
+      同一組參數 <span class="mono hl-r">W</span>,在每個 timestep 重複用一次。句子多長,模型多大都不變。
+    </div>
+
+    <div class="anim-fade anim-d4" style="margin-top: 80px; flex: 1; display: flex; align-items: center; justify-content: center;">
+      <svg viewBox="0 0 1700 420" style="width: 100%; height: auto;">
+        <defs>
+          <marker id="arr2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+            <path d="M0,0 L10,5 L0,10 z" fill="#2b2419"/>
+          </marker>
+          <marker id="arrR2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+            <path d="M0,0 L10,5 L0,10 z" fill="#b6432a"/>
+          </marker>
+        </defs>
+
+        <!-- Timesteps: 5 RNN cells -->
+        <!-- words -->
+        <g font-family="Fraunces, serif" font-weight="800" font-size="40" fill="#b6432a" text-anchor="middle">
+          <text x="180" y="60">我</text>
+          <text x="500" y="60">愛</text>
+          <text x="820" y="60">自</text>
+          <text x="1140" y="60">然</text>
+          <text x="1460" y="60">語</text>
+        </g>
+        <g font-family="Lora, serif" font-style="italic" font-size="18" fill="#5a4f3e" text-anchor="middle">
+          <text x="180" y="84">x₁</text>
+          <text x="500" y="84">x₂</text>
+          <text x="820" y="84">x₃</text>
+          <text x="1140" y="84">x₄</text>
+          <text x="1460" y="84">x₅</text>
+        </g>
+
+        <!-- arrows down to cell -->
+        <g stroke="#2b2419" stroke-width="2.5" marker-end="url(#arr2)">
+          <line x1="180" y1="100" x2="180" y2="180"/>
+          <line x1="500" y1="100" x2="500" y2="180"/>
+          <line x1="820" y1="100" x2="820" y2="180"/>
+          <line x1="1140" y1="100" x2="1140" y2="180"/>
+          <line x1="1460" y1="100" x2="1460" y2="180"/>
+        </g>
+
+        <!-- cells -->
+        <g>
+          <rect x="120" y="180" width="120" height="100" rx="12" fill="#c98e2b" stroke="#2b2419" stroke-width="3"/>
+          <text x="180" y="240" text-anchor="middle" font-family="Fraunces, serif" font-weight="800" font-size="32" fill="#2b2419">h₁</text>
+          <rect x="440" y="180" width="120" height="100" rx="12" fill="#c98e2b" stroke="#2b2419" stroke-width="3"/>
+          <text x="500" y="240" text-anchor="middle" font-family="Fraunces, serif" font-weight="800" font-size="32" fill="#2b2419">h₂</text>
+          <rect x="760" y="180" width="120" height="100" rx="12" fill="#c98e2b" stroke="#2b2419" stroke-width="3"/>
+          <text x="820" y="240" text-anchor="middle" font-family="Fraunces, serif" font-weight="800" font-size="32" fill="#2b2419">h₃</text>
+          <rect x="1080" y="180" width="120" height="100" rx="12" fill="#c98e2b" stroke="#2b2419" stroke-width="3"/>
+          <text x="1140" y="240" text-anchor="middle" font-family="Fraunces, serif" font-weight="800" font-size="32" fill="#2b2419">h₄</text>
+          <rect x="1400" y="180" width="120" height="100" rx="12" fill="#c98e2b" stroke="#2b2419" stroke-width="3"/>
+          <text x="1460" y="240" text-anchor="middle" font-family="Fraunces, serif" font-weight="800" font-size="32" fill="#2b2419">h₅</text>
+        </g>
+
+        <!-- horizontal arrows between cells with W label -->
+        <g stroke="#b6432a" stroke-width="3" marker-end="url(#arrR2)" class="flow-line">
+          <line x1="240" y1="230" x2="430" y2="230"/>
+          <line x1="560" y1="230" x2="750" y2="230"/>
+          <line x1="880" y1="230" x2="1070" y2="230"/>
+          <line x1="1200" y1="230" x2="1390" y2="230"/>
+        </g>
+        <g font-family="JetBrains Mono, monospace" font-size="18" fill="#b6432a" text-anchor="middle" font-weight="700">
+          <text x="335" y="218">W</text>
+          <text x="655" y="218">W</text>
+          <text x="975" y="218">W</text>
+          <text x="1295" y="218">W</text>
+        </g>
+
+        <!-- arrows down to outputs -->
+        <g stroke="#2b2419" stroke-width="2.5" marker-end="url(#arr2)">
+          <line x1="180" y1="280" x2="180" y2="350"/>
+          <line x1="500" y1="280" x2="500" y2="350"/>
+          <line x1="820" y1="280" x2="820" y2="350"/>
+          <line x1="1140" y1="280" x2="1140" y2="350"/>
+          <line x1="1460" y1="280" x2="1460" y2="350"/>
+        </g>
+        <g font-family="Fraunces, serif" font-weight="800" font-size="36" fill="#3f5d3a" text-anchor="middle">
+          <text x="180" y="395">y₁</text>
+          <text x="500" y="395">y₂</text>
+          <text x="820" y="395">y₃</text>
+          <text x="1140" y="395">y₄</text>
+          <text x="1460" y="395">y₅</text>
+        </g>
+      </svg>
+    </div>
+
+    <div class="anim-slide-up anim-d6" style="display: flex; gap: 50px; margin-top: 30px; align-items: center;">
+      <div style="font-family: 'Fraunces', serif; font-style: italic; font-size: 28px; color: var(--ink-soft);">
+        ✦ 注意每一格的 <span class="mono hl-r">W</span> 是同一個 — 這叫 <em>weight sharing</em>。
+      </div>
+    </div>
+    <div class="slide-num">06</div>
+  </section>
+
+  <!-- Slide 6b: Token stream animation -->
+  <section data-screen-label="06b RNN Token Stream">
+    <div class="slide-tag anim-fade anim-d1">Part 01 · RNN · In Motion</div>
+    <h2 class="h-1 anim-slide-up anim-d2" style="margin-top: 110px;">
+      動畫:看 RNN <span style="font-style: italic;">一個字一個字</span>讀
+    </h2>
+    <div class="body-l anim-slide-up anim-d3" style="margin-top: 16px; max-width: 1400px;">
+      每個 timestep:讀一個 token,更新 hidden state。下方長條代表 hidden state 在 8 個維度上的「能量分布」。
+    </div>
+
+    <div style="margin-top: 50px; flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 24px;">
+      <div class="anim-pop anim-d4" style="background: var(--paper); border: 3px solid var(--ink); padding: 36px 60px; box-shadow: var(--shadow);">
+        <div class="card-label" style="margin-bottom: 18px;">INPUT TOKENS · 依序讀入</div>
+        <div class="token-stream">
+          <div class="tok active">我</div>
+          <div class="tok active">愛</div>
+          <div class="tok active">深</div>
+          <div class="tok active">度</div>
+          <div class="tok active">學</div>
+        </div>
+      </div>
+
+      <div style="font-family: 'Fraunces', serif; font-size: 50px; color: var(--accent-red); line-height: 1;">↓</div>
+
+      <div class="anim-pop anim-d5" style="background: var(--paper); border: 3px solid var(--ink); padding: 28px 50px; box-shadow: var(--shadow); display: flex; align-items: center; gap: 40px;">
+        <div class="card-label" style="position: static; transform: none;">HIDDEN STATE h_t</div>
+        <div class="hidden-state-bars" style="height: 140px;">
+          <div class="bar"></div>
+          <div class="bar"></div>
+          <div class="bar"></div>
+          <div class="bar"></div>
+          <div class="bar"></div>
+          <div class="bar"></div>
+          <div class="bar"></div>
+          <div class="bar"></div>
+        </div>
+      </div>
+    </div>
+    <div class="slide-num">06b</div>
+  </section>
+
+  <!-- Slide 7: RNN problem - vanishing gradient -->
+  <section data-screen-label="07 Vanishing Gradient">
+    <div class="slide-tag anim-fade anim-d1">Part 01 · RNN · Problem</div>
+    <h2 class="h-1 anim-slide-up anim-d2" style="margin-top: 130px;">
+      但 RNN 有個<span style="color: var(--accent-red);">致命傷</span>
+    </h2>
+
+    <div style="display: grid; grid-template-columns: 1.1fr 1fr; gap: 80px; margin-top: 70px; align-items: center;">
+      <div>
+        <div class="body-l anim-slide-up anim-d3" style="margin-bottom: 30px;">
+          梯度反向傳播時,要連續乘很多次小於 1 的數。
+        </div>
+        <div class="eq-big anim-pop anim-d4" style="font-size: 38px; color: var(--ink); font-weight: 700;">
+          <span class="eq-tag">VANISHING</span>
+          0.9 × 0.9 × 0.9 × ... × 0.9 ≈ <span style="color: var(--accent-red);">0</span>
+        </div>
+        <div class="body-l anim-slide-up anim-d5" style="margin-top: 40px;">
+          句子越長,前面的字對結果的影響就<span class="hl-r">趨近於零</span>。模型根本學不到長距離依賴。
+        </div>
+        <div class="tagline anim-slide-up anim-d6" style="margin-top: 40px; font-size: 30px;">
+          ✦ 一句話講到尾,RNN 已經忘了開頭。
+        </div>
+      </div>
+
+      <!-- Visualisation: bars decaying -->
+      <div class="card anim-pop anim-d4" style="padding: 40px;">
+        <div class="card-label red">GRADIENT MAGNITUDE</div>
+        <div style="display: flex; align-items: flex-end; gap: 12px; margin-top: 30px; height: 320px;">
+          <div style="flex:1; display:flex; flex-direction:column; align-items:center;"><div style="background:#3f5d3a; width:100%; height:300px; border:2px solid #2b2419;"></div><div class="mono" style="margin-top:10px; font-size:18px;">t=10</div></div>
+          <div style="flex:1; display:flex; flex-direction:column; align-items:center;"><div style="background:#3f5d3a; width:100%; height:240px; border:2px solid #2b2419;"></div><div class="mono" style="margin-top:10px; font-size:18px;">t=8</div></div>
+          <div style="flex:1; display:flex; flex-direction:column; align-items:center;"><div style="background:#c98e2b; width:100%; height:170px; border:2px solid #2b2419;"></div><div class="mono" style="margin-top:10px; font-size:18px;">t=6</div></div>
+          <div style="flex:1; display:flex; flex-direction:column; align-items:center;"><div style="background:#c98e2b; width:100%; height:100px; border:2px solid #2b2419;"></div><div class="mono" style="margin-top:10px; font-size:18px;">t=4</div></div>
+          <div style="flex:1; display:flex; flex-direction:column; align-items:center;"><div style="background:#b6432a; width:100%; height:50px; border:2px solid #2b2419;"></div><div class="mono" style="margin-top:10px; font-size:18px;">t=2</div></div>
+          <div style="flex:1; display:flex; flex-direction:column; align-items:center;"><div style="background:#b6432a; width:100%; height:14px; border:2px solid #2b2419;"></div><div class="mono" style="margin-top:10px; font-size:18px;">t=0</div></div>
+        </div>
+        <div class="body-m" style="margin-top: 24px; font-size: 22px; font-style: italic; text-align: center;">
+          越往前梯度越小 — <span class="hl-r">前面學不到</span>
+        </div>
+      </div>
+    </div>
+    <div class="slide-num">07</div>
+  </section>
+
+  <!-- Slide 7b: Gradient flow animation -->
+  <section data-screen-label="07b Gradient Flow">
+    <div class="slide-tag anim-fade anim-d1">Part 01 · RNN · Why It Forgets</div>
+    <h2 class="h-1 anim-slide-up anim-d2" style="margin-top: 110px;">
+      訊號從<span style="font-style: italic;">尾端傳回去</span>,越走越弱
+    </h2>
+    <div class="body-l anim-slide-up anim-d3" style="margin-top: 16px; max-width: 1500px;">
+      Backprop Through Time (BPTT):梯度要逆著時間傳。每經過一格,乘一次 W,如果 ‖W‖ &lt; 1 → 指數衰減。
+    </div>
+
+    <div style="margin-top: 100px; flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 80px;">
+      <div class="anim-pop anim-d4" style="position: relative; padding: 60px 0;">
+        <div class="gradient-flow">
+          <div class="step">x₁</div>
+          <div class="step">x₂</div>
+          <div class="step">x₃</div>
+          <div class="step">x₄</div>
+          <div class="step">x₅</div>
+          <div class="step" style="background: var(--accent-red); color: var(--paper);">L</div>
+          <div class="signal-pulse"></div>
+        </div>
+        <div style="text-align: center; margin-top: 40px; font-family: 'JetBrains Mono', monospace; font-size: 22px; color: var(--ink-soft);">
+          ← gradient travels backwards · 強度 ∝ Wⁿ
+        </div>
+      </div>
+
+      <div class="anim-fade anim-d6" style="display: grid; grid-template-columns: 1fr 1fr; gap: 50px;">
+        <div style="background: var(--paper); border: 3px solid var(--ink); padding: 36px; box-shadow: var(--shadow-soft);">
+          <div class="card-label" style="color: var(--accent-red);">VANISHING</div>
+          <div class="eq-big" style="margin-top: 20px;">‖W‖ &lt; 1 → 0.9¹⁰⁰ ≈ 10⁻⁵</div>
+          <div class="body-s" style="margin-top: 14px;">梯度趨近 0,前面的層學不到任何東西。</div>
+        </div>
+        <div style="background: var(--paper); border: 3px solid var(--ink); padding: 36px; box-shadow: var(--shadow-soft);">
+          <div class="card-label" style="color: var(--accent-mustard);">EXPLODING</div>
+          <div class="eq-big" style="margin-top: 20px;">‖W‖ &gt; 1 → 1.1¹⁰⁰ ≈ 14000</div>
+          <div class="body-s" style="margin-top: 14px;">梯度爆炸,參數狂飆,訓練炸裂 (NaN)。</div>
+        </div>
+      </div>
+    </div>
+    <div class="slide-num">07b</div>
+  </section>
+
+  <!-- Slide 8: LSTM intro -->
+  <section data-screen-label="08 LSTM Intro">
+    <div class="slide-tag anim-fade anim-d1">Part 02 · LSTM</div>
+    <div style="margin-top: 130px;">
+      <div style="font-family: 'JetBrains Mono', monospace; color: var(--accent-mustard); font-size: 22px; margin-bottom: 16px;" class="anim-fade anim-d2">MODEL · 模型 #02</div>
+      <h2 class="h-disp anim-slide-up anim-d3" style="font-size: 110px;">
+        LSTM<span style="color: var(--accent-red); font-style: italic;">.</span>
+      </h2>
+      <div class="anim-slide-up anim-d4" style="font-family: 'Fraunces', serif; font-style: italic; font-size: 42px; color: var(--ink-soft); margin-top: 16px;">
+        Long Short-Term Memory · 長短期記憶
+      </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 40px; margin-top: 100px;">
+      <div class="card anim-pop anim-d5">
+        <div style="font-family: 'Fraunces', serif; font-weight: 800; font-size: 64px; color: var(--accent-red); line-height: 1;">f</div>
+        <div class="h-3" style="margin-top: 12px;">Forget Gate</div>
+        <div class="body-m" style="margin-top: 14px; font-size: 24px;">決定<span class="hl-r">忘掉</span>什麼。</div>
+      </div>
+      <div class="card anim-pop anim-d6">
+        <div style="font-family: 'Fraunces', serif; font-weight: 800; font-size: 64px; color: var(--accent-green); line-height: 1;">i</div>
+        <div class="h-3" style="margin-top: 12px;">Input Gate</div>
+        <div class="body-m" style="margin-top: 14px; font-size: 24px;">決定<span class="hl-g">記住</span>什麼。</div>
+      </div>
+      <div class="card anim-pop anim-d7">
+        <div style="font-family: 'Fraunces', serif; font-weight: 800; font-size: 64px; color: var(--accent-blue); line-height: 1;">o</div>
+        <div class="h-3" style="margin-top: 12px;">Output Gate</div>
+        <div class="body-m" style="margin-top: 14px; font-size: 24px;">決定<span class="hl-b">輸出</span>什麼。</div>
+      </div>
+    </div>
+
+    <div class="anim-slide-up anim-d8 tagline" style="margin-top: 60px; font-size: 30px;">
+      三個門就像水龍頭,開大開小都是模型自己學的。
+    </div>
+    <div class="slide-num">08</div>
+  </section>
+
+  <!-- Slide 9: LSTM math -->
+  <section data-screen-label="09 LSTM Math">
+    <div class="slide-tag anim-fade anim-d1">Part 02 · LSTM · Math</div>
+    <h2 class="h-1 anim-slide-up anim-d2" style="margin-top: 130px;">
+      公式長相 <span style="font-style: italic; color: var(--ink-soft); font-size: 56px;">— 看就好,不用背</span>
+    </h2>
+
+    <div style="display: grid; grid-template-columns: 1.1fr 1fr; gap: 70px; margin-top: 70px; flex: 1;">
+      <div>
+        <div class="anim-slide-up anim-d3 mono" style="background: var(--paper); border: 3px solid var(--ink); padding: 28px 34px; box-shadow: var(--shadow); font-size: 28px; line-height: 1.9;">
+          <div><span style="color: var(--accent-red);">f</span><sub>t</sub> = σ(W<sub>f</sub>·[h<sub>t-1</sub>, x<sub>t</sub>] + b<sub>f</sub>)</div>
+          <div><span style="color: var(--accent-green);">i</span><sub>t</sub> = σ(W<sub>i</sub>·[h<sub>t-1</sub>, x<sub>t</sub>] + b<sub>i</sub>)</div>
+          <div>C̃<sub>t</sub> = tanh(W<sub>C</sub>·[h<sub>t-1</sub>, x<sub>t</sub>] + b<sub>C</sub>)</div>
+          <div style="background: rgba(201,142,43,0.3); padding: 6px 10px; margin: 8px -10px; border-left: 4px solid var(--accent-mustard);">
+            C<sub>t</sub> = <span style="color: var(--accent-red);">f</span><sub>t</sub> ⊙ C<sub>t-1</sub> <span style="color: var(--accent-red); font-weight: 700;">+</span> <span style="color: var(--accent-green);">i</span><sub>t</sub> ⊙ C̃<sub>t</sub>
+          </div>
+          <div><span style="color: var(--accent-blue);">o</span><sub>t</sub> = σ(W<sub>o</sub>·[h<sub>t-1</sub>, x<sub>t</sub>] + b<sub>o</sub>)</div>
+          <div>h<sub>t</sub> = <span style="color: var(--accent-blue);">o</span><sub>t</sub> ⊙ tanh(C<sub>t</sub>)</div>
+        </div>
+      </div>
+
+      <div>
+        <div class="card anim-pop anim-d5" style="background: var(--bg-soft);">
+          <div class="card-label" style="background: var(--accent-mustard);">KEY INSIGHT · 關鍵</div>
+          <div class="body-l" style="margin-top: 20px;">
+            看到中間那條黃色高亮的式子嗎?<br><br>
+            <span class="hl-r">Cell state 用「+」更新</span>,不是「×」。
+          </div>
+          <div class="body-l" style="margin-top: 24px;">
+            加法 → 梯度可以一路傳回去<br>→ <span class="hl-y">記得遠的東西</span>。
+          </div>
+        </div>
+        <div class="anim-slide-up anim-d7" style="margin-top: 40px; font-style: italic; font-family: 'Fraunces', serif; font-size: 26px; color: var(--ink-faint);">
+          ✦ 這個「加法 highway」是 LSTM 全部的精神。
+        </div>
+      </div>
+    </div>
+    <div class="slide-num">09</div>
+  </section>
+
+  <!-- Slide 9b: LSTM gates animation -->
+  <section data-screen-label="09b LSTM Gates Anim">
+    <div class="slide-tag anim-fade anim-d1">Part 02 · LSTM · Gates In Motion</div>
+    <h2 class="h-1 anim-slide-up anim-d2" style="margin-top: 110px;">
+      三道<span style="font-style: italic;">水龍頭</span> — 模型自己學要開多大
+    </h2>
+    <div class="body-l anim-slide-up anim-d3" style="margin-top: 16px; max-width: 1500px;">
+      Sigmoid 輸出 0~1 之間的值,就像水閥。0 = 完全關掉,1 = 全開。每個 timestep 動態調整。
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 50px; margin-top: 90px;">
+      <div class="anim-pop anim-d4" style="background: var(--paper); border: 3px solid var(--ink); padding: 40px; text-align: center; box-shadow: var(--shadow);">
+        <div class="card-label" style="color: var(--accent-red);">FORGET GATE</div>
+        <div style="display:flex; justify-content:center; margin: 30px 0;">
+          <div class="gate-valve">
+            <div class="pipe"></div>
+            <div class="water"></div>
+            <div class="knob"></div>
+          </div>
+        </div>
+        <div class="body-m" style="font-weight: 700;">f<sub>t</sub> = σ(W<sub>f</sub> · [h, x])</div>
+        <div class="body-s" style="margin-top: 10px;">「舊記憶要保留多少?」</div>
+      </div>
+
+      <div class="anim-pop anim-d5" style="background: var(--paper); border: 3px solid var(--ink); padding: 40px; text-align: center; box-shadow: var(--shadow);">
+        <div class="card-label" style="color: var(--accent-blue);">INPUT GATE</div>
+        <div style="display:flex; justify-content:center; margin: 30px 0;">
+          <div class="gate-valve">
+            <div class="pipe"></div>
+            <div class="water" style="animation-delay: 0.5s; background: var(--accent-blue);"></div>
+            <div class="knob" style="animation-delay: 0.5s;"></div>
+          </div>
+        </div>
+        <div class="body-m" style="font-weight: 700;">i<sub>t</sub> = σ(W<sub>i</sub> · [h, x])</div>
+        <div class="body-s" style="margin-top: 10px;">「新訊息要寫入多少?」</div>
+      </div>
+
+      <div class="anim-pop anim-d6" style="background: var(--paper); border: 3px solid var(--ink); padding: 40px; text-align: center; box-shadow: var(--shadow);">
+        <div class="card-label" style="color: var(--accent-green);">OUTPUT GATE</div>
+        <div style="display:flex; justify-content:center; margin: 30px 0;">
+          <div class="gate-valve">
+            <div class="pipe"></div>
+            <div class="water" style="animation-delay: 1s; background: var(--accent-green);"></div>
+            <div class="knob" style="animation-delay: 1s;"></div>
+          </div>
+        </div>
+        <div class="body-m" style="font-weight: 700;">o<sub>t</sub> = σ(W<sub>o</sub> · [h, x])</div>
+        <div class="body-s" style="margin-top: 10px;">「要對外輸出多少?」</div>
+      </div>
+    </div>
+    <div class="slide-num">09b</div>
+  </section>
+
+  <!-- Slide 10: GRU + comparison -->
+  <section data-screen-label="10 GRU vs LSTM">
+    <div class="slide-tag anim-fade anim-d1">Part 02 · GRU</div>
+    <h2 class="h-1 anim-slide-up anim-d2" style="margin-top: 130px;">
+      GRU <span style="font-style: italic; color: var(--ink-soft); font-size: 50px;">— LSTM 的瘦身版</span>
+    </h2>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 60px; margin-top: 80px; flex: 1;">
+      <div class="card anim-pop anim-d3" style="background: var(--paper);">
+        <div class="card-label">LSTM</div>
+        <div style="display: flex; gap: 14px; margin-top: 24px; flex-wrap: wrap;">
+          <span class="token-chip-big" style="background: var(--accent-red); color: var(--paper);">forget</span>
+          <span class="token-chip-big" style="background: var(--accent-green); color: var(--paper);">input</span>
+          <span class="token-chip-big" style="background: var(--accent-blue); color: var(--paper);">output</span>
+        </div>
+        <div class="body-l" style="margin-top: 36px;">
+          <span class="hl-r">3 個門</span> · 參數多 · 表達力強
+        </div>
+        <div class="body-m" style="margin-top: 14px; font-size: 24px;">大資料、追求效能 → 用 LSTM</div>
+      </div>
+      <div class="card anim-pop anim-d4" style="background: var(--paper);">
+        <div class="card-label" style="background: var(--accent-green); color: var(--paper);">GRU</div>
+        <div style="display: flex; gap: 14px; margin-top: 24px; flex-wrap: wrap;">
+          <span class="token-chip-big" style="background: var(--accent-mustard);">reset</span>
+          <span class="token-chip-big" style="background: var(--accent-blue); color: var(--paper);">update</span>
+        </div>
+        <div class="body-l" style="margin-top: 36px;">
+          <span class="hl-g">2 個門</span> · 參數少 · 訓練快
+        </div>
+        <div class="body-m" style="margin-top: 14px; font-size: 24px;">資料不大、想跑快 → 用 GRU</div>
+      </div>
+    </div>
+
+    <div class="anim-slide-up anim-d6 tagline" style="margin-top: 60px; font-size: 28px;">
+      實務上,效能差不多。2017 之後 → 兩個都被 Transformer 取代。
+    </div>
+    <div class="slide-num">10</div>
+  </section>
+
+  <!-- Slide 11: ELMo -->
+  <section data-screen-label="11 ELMo">
+    <div class="slide-tag anim-fade anim-d1">Part 03 · ELMo</div>
+    <div style="margin-top: 130px;">
+      <div style="font-family: 'JetBrains Mono', monospace; color: var(--accent-green); font-size: 22px; margin-bottom: 16px;" class="anim-fade anim-d2">CONTEXT · 情境的崛起</div>
+      <h2 class="h-disp anim-slide-up anim-d3" style="font-size: 120px;">
+        ELMo<span style="color: var(--accent-red); font-style: italic;">.</span>
+      </h2>
+      <div class="anim-slide-up anim-d4" style="font-family: 'Fraunces', serif; font-style: italic; font-size: 36px; color: var(--ink-soft); margin-top: 16px;">
+        Embeddings from Language Models · 2018
+      </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 60px; margin-top: 80px;">
+      <div class="card anim-pop anim-d5" style="background: var(--bg-soft);">
+        <div class="card-label">BEFORE · 以前</div>
+        <div class="body-l" style="margin-top: 18px;">
+          Word2Vec / GloVe — 一個字 = <span class="hl-r">固定一個向量</span>
+        </div>
+        <div style="margin-top: 30px; font-family: 'JetBrains Mono', monospace; font-size: 26px; line-height: 2;">
+          <div>"river <span style="background: var(--accent-mustard); padding: 2px 8px;">bank</span>"  → [0.3, ...]</div>
+          <div>"<span style="background: var(--accent-mustard); padding: 2px 8px;">bank</span> account" → [0.3, ...]</div>
+        </div>
+        <div class="body-m" style="margin-top: 24px; font-size: 24px;">↑ 兩個 bank 一模一樣 ❌</div>
+      </div>
+      <div class="card anim-pop anim-d6 green" style="background: var(--paper);">
+        <div class="card-label">ELMo · 之後</div>
+        <div class="body-l" style="margin-top: 18px;">
+          雙向 LSTM 同時看<span class="hl-g">前文 + 後文</span>
+        </div>
+        <div style="margin-top: 30px; font-family: 'JetBrains Mono', monospace; font-size: 26px; line-height: 2;">
+          <div>"river <span style="background: var(--accent-green); color: var(--paper); padding: 2px 8px;">bank</span>"  → [0.7, ...]</div>
+          <div>"<span style="background: var(--accent-green); color: var(--paper); padding: 2px 8px;">bank</span> account" → [-0.2, ...]</div>
+        </div>
+        <div class="body-m" style="margin-top: 24px; font-size: 24px;">↑ context-dependent ✓</div>
+      </div>
+    </div>
+    <div class="slide-num">11</div>
+  </section>
+
+  <!-- Slide 11b: Seq2Seq -->
+  <section data-screen-label="11b Seq2Seq">
+    <div class="slide-tag anim-fade anim-d1">Bridge · 2014 · Seq2Seq</div>
+    <h2 class="h-1 anim-slide-up anim-d2" style="margin-top: 110px;">
+      在 Attention 之前 — <span style="font-style: italic;">Seq2Seq</span>
+    </h2>
+    <div class="body-l anim-slide-up anim-d3" style="margin-top: 16px; max-width: 1500px;">
+      Sutskever 2014:用兩個 RNN 串起來做翻譯。Encoder 把整句壓縮成一個向量,Decoder 從這個向量解出目標語言。
+    </div>
+
+    <div class="anim-pop anim-d4" style="margin-top: 50px; background: var(--paper); border: 3px solid var(--ink); padding: 36px 50px; box-shadow: var(--shadow);">
+      <div class="card-label">ENCODER → CONTEXT VECTOR → DECODER</div>
+      <svg viewBox="0 0 1400 280" style="width: 100%; height: auto; max-height: 360px; margin-top: 20px;">
+        <!-- Encoder boxes -->
+        <g>
+          <rect x="40"  y="60" width="100" height="80" fill="#5b86b8" stroke="#2b2419" stroke-width="3"/>
+          <rect x="170" y="60" width="100" height="80" fill="#5b86b8" stroke="#2b2419" stroke-width="3"/>
+          <rect x="300" y="60" width="100" height="80" fill="#5b86b8" stroke="#2b2419" stroke-width="3"/>
+          <rect x="430" y="60" width="100" height="80" fill="#5b86b8" stroke="#2b2419" stroke-width="3"/>
+          <text x="90"  y="110" text-anchor="middle" font-family="Fraunces" font-weight="800" font-size="28" fill="#faf3e3">我</text>
+          <text x="220" y="110" text-anchor="middle" font-family="Fraunces" font-weight="800" font-size="28" fill="#faf3e3">愛</text>
+          <text x="350" y="110" text-anchor="middle" font-family="Fraunces" font-weight="800" font-size="28" fill="#faf3e3">你</text>
+          <text x="480" y="110" text-anchor="middle" font-family="Fraunces" font-weight="800" font-size="20" fill="#faf3e3">&lt;eos&gt;</text>
+          <text x="285" y="200" text-anchor="middle" font-family="Lora" font-style="italic" font-size="22" fill="#2b2419">Encoder · 編碼器</text>
+        </g>
+
+        <!-- Context bottleneck -->
+        <circle cx="640" cy="100" r="50" fill="#c34a3a" stroke="#2b2419" stroke-width="3"/>
+        <text x="640" y="108" text-anchor="middle" font-family="Fraunces" font-weight="800" font-size="22" fill="#faf3e3">c</text>
+        <text x="640" y="200" text-anchor="middle" font-family="JetBrains Mono" font-size="16" fill="#2b2419">context vector</text>
+
+        <!-- arrow into context -->
+        <line x1="540" y1="100" x2="585" y2="100" stroke="#2b2419" stroke-width="3" marker-end="url(#arr2)"/>
+        <line x1="690" y1="100" x2="735" y2="100" stroke="#2b2419" stroke-width="3" marker-end="url(#arr2)"/>
+
+        <!-- Decoder boxes -->
+        <g>
+          <rect x="750" y="60" width="100" height="80" fill="#6a8a5e" stroke="#2b2419" stroke-width="3"/>
+          <rect x="880" y="60" width="100" height="80" fill="#6a8a5e" stroke="#2b2419" stroke-width="3"/>
+          <rect x="1010" y="60" width="100" height="80" fill="#6a8a5e" stroke="#2b2419" stroke-width="3"/>
+          <rect x="1140" y="60" width="100" height="80" fill="#6a8a5e" stroke="#2b2419" stroke-width="3"/>
+          <text x="800" y="110" text-anchor="middle" font-family="Fraunces" font-weight="800" font-size="20" fill="#faf3e3">I</text>
+          <text x="930" y="110" text-anchor="middle" font-family="Fraunces" font-weight="800" font-size="20" fill="#faf3e3">love</text>
+          <text x="1060" y="110" text-anchor="middle" font-family="Fraunces" font-weight="800" font-size="20" fill="#faf3e3">you</text>
+          <text x="1190" y="110" text-anchor="middle" font-family="Fraunces" font-weight="800" font-size="18" fill="#faf3e3">&lt;eos&gt;</text>
+          <text x="995" y="200" text-anchor="middle" font-family="Lora" font-style="italic" font-size="22" fill="#2b2419">Decoder · 解碼器</text>
+        </g>
+
+        <defs>
+          <marker id="arr2" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto">
+            <polygon points="0 0, 10 5, 0 10" fill="#2b2419"/>
+          </marker>
+        </defs>
+
+        <!-- Bottleneck warning -->
+        <text x="640" y="260" text-anchor="middle" font-family="Fraunces" font-style="italic" font-weight="700" font-size="22" fill="#c34a3a">⚠ 整句壓進一個固定向量 → 長句訊息流失</text>
+      </svg>
+    </div>
+
+    <div class="anim-fade anim-d6 tagline" style="margin-top: 30px; font-size: 24px;">
+      ✦ 這個 bottleneck 就是 Bahdanau 在 2015 年用 Attention 解掉的問題。
+    </div>
+    <div class="slide-num">11b</div>
+  </section>
+
+  <!-- Slide 11c: Bahdanau Attention historical context -->
+  <section data-screen-label="11c Bahdanau Attention">
+    <div class="slide-tag anim-fade anim-d1">Bridge · 2015 · Bahdanau</div>
+    <h2 class="h-1 anim-slide-up anim-d2" style="margin-top: 110px;">
+      Attention <span style="font-style: italic;">最早的形式</span>
+    </h2>
+    <div class="body-l anim-slide-up anim-d3" style="margin-top: 16px; max-width: 1500px;">
+      Bahdanau 2015:Decoder 每生一個字,都「重新看一次」整個 source。不再依賴單一 context 向量。
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 70px; margin-top: 80px; flex: 1; align-items: center;">
+      <div class="anim-pop anim-d4" style="background: var(--paper); border: 3px solid var(--ink); padding: 50px; box-shadow: var(--shadow);">
+        <div class="card-label">三步驟思路</div>
+        <ol style="margin-top: 30px; padding-left: 24px; display: flex; flex-direction: column; gap: 22px; font-family: 'Lora', serif; font-size: 26px; line-height: 1.5;">
+          <li><b>Score</b> — Decoder 當前狀態與每個 encoder hidden state 算相似度</li>
+          <li><b>Softmax</b> — 把分數歸一化成 attention weights α</li>
+          <li><b>Weighted sum</b> — α 加權的 context 向量,當作 decoder 的補充輸入</li>
+        </ol>
+      </div>
+
+      <div class="anim-slide-left anim-d5">
+        <div class="eq-big" style="margin-bottom: 28px;">
+          α<sub>ij</sub> = softmax( score(s<sub>i</sub>, h<sub>j</sub>) )
+        </div>
+        <div class="eq-big" style="margin-bottom: 28px;">
+          c<sub>i</sub> = Σ α<sub>ij</sub> · h<sub>j</sub>
+        </div>
+        <div class="body-m" style="margin-top: 30px; font-style: italic;">
+          這個「<span class="hl-y">每步動態查整個輸入</span>」的想法,兩年後被 Vaswani 推到極致 → Self-Attention。
+        </div>
+      </div>
+    </div>
+    <div class="slide-num">11c</div>
+  </section>
+
+  <!-- Slide 12: Section divider - Transformer -->
+  <section data-screen-label="12 Transformer Divider" style="background: var(--ink); color: var(--paper); justify-content: center; align-items: flex-start; padding: 110px;">
+    <div class="dot-pattern" style="opacity: 0.15;"></div>
+    <div style="position: relative; z-index: 1;">
+      <div class="anim-slide-right anim-d1" style="font-family: 'JetBrains Mono', monospace; color: var(--accent-mustard); letter-spacing: 0.2em; font-size: 22px; margin-bottom: 30px;">
+        ━━━━ PART 04 · THE TURNING POINT
+      </div>
+      <h2 class="anim-slide-up anim-d2" style="font-family: 'Fraunces', serif; font-weight: 800; font-size: 200px; line-height: 0.95; letter-spacing: -0.04em; margin: 0; color: var(--paper);">
+        Attention<br>
+        <em style="color: var(--accent-mustard);">is</em><br>
+        all you need.
+      </h2>
+      <div class="anim-fade anim-d4" style="margin-top: 60px; font-family: 'Lora', serif; font-style: italic; font-size: 32px; color: rgba(250,243,227,0.7);">
+        Vaswani et al., 2017 · 過去十年最重要的一篇論文
+      </div>
+    </div>
+    <div class="slide-num" style="color: rgba(250,243,227,0.5);">12</div>
+  </section>
+
+  <!-- Slide 13: Attention intuition -->
+  <section data-screen-label="13 Attention Intuition">
+    <div class="slide-tag anim-fade anim-d1">Part 04 · Attention</div>
+    <h2 class="h-1 anim-slide-up anim-d2" style="margin-top: 130px;">
+      Attention 的<span style="font-style: italic;">直覺</span>
+    </h2>
+    <div class="body-l anim-slide-up anim-d3" style="margin-top: 24px; max-width: 1500px;">
+      讀到「<span class="hl-r">it</span>」的時候,你會在腦袋裡掃前文 — 自動<span class="hl-y">聚焦</span>到某個字上。
+    </div>
+
+    <div class="anim-fade anim-d4" style="margin-top: 80px; flex: 1; display: flex; flex-direction: column; justify-content: center;">
+      <!-- Sentence with attention weights -->
+      <div style="display: flex; gap: 16px; align-items: flex-end; justify-content: center; flex-wrap: wrap;">
+        <!-- words with weighted glow -->
+        <div style="text-align: center;">
+          <div style="height: 30px; width: 80px; background: rgba(182,67,42,0.15); border-bottom: 4px solid var(--accent-red); margin-bottom: 8px;"></div>
+          <div class="token-chip-big">The</div>
+          <div class="mono" style="margin-top: 8px; font-size: 18px; color: var(--ink-faint);">0.05</div>
+        </div>
+        <div style="text-align: center;">
+          <div style="height: 220px; width: 130px; background: rgba(182,67,42,0.85); border-bottom: 4px solid var(--accent-red); margin-bottom: 8px; box-shadow: var(--shadow-soft);"></div>
+          <div class="token-chip-big" style="background: var(--accent-red); color: var(--paper); font-weight: 700;">animal</div>
+          <div class="mono" style="margin-top: 8px; font-size: 22px; color: var(--accent-red); font-weight: 700;">0.74 ★</div>
+        </div>
+        <div style="text-align: center;">
+          <div style="height: 50px; width: 100px; background: rgba(182,67,42,0.25); border-bottom: 4px solid var(--accent-red); margin-bottom: 8px;"></div>
+          <div class="token-chip-big">didn't</div>
+          <div class="mono" style="margin-top: 8px; font-size: 18px; color: var(--ink-faint);">0.08</div>
+        </div>
+        <div style="text-align: center;">
+          <div style="height: 30px; width: 100px; background: rgba(182,67,42,0.15); border-bottom: 4px solid var(--accent-red); margin-bottom: 8px;"></div>
+          <div class="token-chip-big">cross</div>
+          <div class="mono" style="margin-top: 8px; font-size: 18px; color: var(--ink-faint);">0.04</div>
+        </div>
+        <div style="text-align: center;">
+          <div style="height: 30px; width: 90px; background: rgba(182,67,42,0.15); border-bottom: 4px solid var(--accent-red); margin-bottom: 8px;"></div>
+          <div class="token-chip-big">the</div>
+          <div class="mono" style="margin-top: 8px; font-size: 18px; color: var(--ink-faint);">0.03</div>
+        </div>
+        <div style="text-align: center;">
+          <div style="height: 70px; width: 110px; background: rgba(182,67,42,0.35); border-bottom: 4px solid var(--accent-red); margin-bottom: 8px;"></div>
+          <div class="token-chip-big">street</div>
+          <div class="mono" style="margin-top: 8px; font-size: 18px; color: var(--ink-faint);">0.06</div>
+        </div>
+        <div style="text-align: center;">
+          <div style="height: 200px; width: 90px; background: var(--accent-mustard); border: 3px solid var(--ink); margin-bottom: 8px;"></div>
+          <div class="token-chip-big" style="background: var(--accent-mustard);">it</div>
+          <div class="mono" style="margin-top: 8px; font-size: 18px;">QUERY</div>
+        </div>
+      </div>
+      <div class="anim-slide-up anim-d6 tagline" style="margin-top: 60px; font-size: 28px;">
+        ✦ "it" 自動指向 "animal" — 每個字都和其他字算<span class="hl-r">相關度</span>。
+      </div>
+    </div>
+    <div class="slide-num">13</div>
+  </section>
+
+  <!-- Slide 14: Attention formula -->
+  <section data-screen-label="14 Attention Formula">
+    <div class="slide-tag anim-fade anim-d1">Part 04 · Self-Attention</div>
+    <h2 class="h-1 anim-slide-up anim-d2" style="margin-top: 130px;">
+      核心公式 <span style="font-style: italic; color: var(--ink-soft); font-size: 50px;">— 三件事而已</span>
+    </h2>
+
+    <div class="anim-pop anim-d3" style="display: flex; justify-content: center; margin-top: 80px;">
+      <div class="eq-big" style="font-size: 60px; padding: 40px 60px;">
+        <span class="eq-tag">SELF-ATTENTION</span>
+        Attention(Q, K, V) = softmax( <span style="color: var(--accent-red);">QKᵀ</span> / √d<sub>k</sub> ) <span style="color: var(--accent-green);">V</span>
+      </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 40px; margin-top: 80px;">
+      <div class="card anim-slide-up anim-d4">
+        <div style="font-family: 'Fraunces', serif; font-weight: 800; font-size: 44px; color: var(--accent-red); margin-bottom: 8px;">① 相似度</div>
+        <div class="mono" style="font-size: 26px; margin-bottom: 14px;">QKᵀ</div>
+        <div class="body-m" style="font-size: 22px;">每個 Query 跟每個 Key 算內積。</div>
+      </div>
+      <div class="card anim-slide-up anim-d5">
+        <div style="font-family: 'Fraunces', serif; font-weight: 800; font-size: 44px; color: var(--accent-mustard); margin-bottom: 8px;">② 正規化</div>
+        <div class="mono" style="font-size: 26px; margin-bottom: 14px;">softmax(·)</div>
+        <div class="body-m" style="font-size: 22px;">轉成機率分布,加總 = 1。</div>
+      </div>
+      <div class="card anim-slide-up anim-d6">
+        <div style="font-family: 'Fraunces', serif; font-weight: 800; font-size: 44px; color: var(--accent-green); margin-bottom: 8px;">③ 加權和</div>
+        <div class="mono" style="font-size: 26px; margin-bottom: 14px;">·V</div>
+        <div class="body-m" style="font-size: 22px;">用權重去取 Value 的混合。</div>
+      </div>
+    </div>
+
+    <div class="anim-fade anim-d7" style="margin-top: 60px; text-align: center; font-family: 'Fraunces', serif; font-style: italic; font-size: 28px; color: var(--ink-soft);">
+      Q / K / V = Query / Key / Value · 像查字典:用 Query 找最像的 Key,拿出對應的 Value
+    </div>
+    <div class="slide-num">14</div>
+  </section>
+
+  <!-- Slide 14b: Q/K/V matmul animation -->
+  <section data-screen-label="14b QKV Matmul">
+    <div class="slide-tag anim-fade anim-d1">Part 04 · Q · K · V</div>
+    <h2 class="h-1 anim-slide-up anim-d2" style="margin-top: 110px;">
+      動畫:Q · K<sup>T</sup> · V <span style="font-style: italic;">的矩陣流</span>
+    </h2>
+    <div class="body-l anim-slide-up anim-d3" style="margin-top: 16px; max-width: 1500px;">
+      每個 token 的 embedding 經三組權重 W<sub>Q</sub>、W<sub>K</sub>、W<sub>V</sub>,投影出三組向量。然後 Q × K<sup>T</sup> → softmax → × V。
+    </div>
+
+    <div class="anim-pop anim-d4" style="margin-top: 90px; flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 50px;">
+      <div class="qkv-flow">
+        <div style="text-align: center;">
+          <div class="card-label" style="position: static; transform: none; margin-bottom: 14px; color: var(--accent-red);">Q · QUERY</div>
+          <div class="matrix-box q">
+            <div class="m-cell"></div><div class="m-cell"></div><div class="m-cell"></div><div class="m-cell"></div>
+            <div class="m-cell"></div><div class="m-cell"></div><div class="m-cell"></div><div class="m-cell"></div>
+            <div class="m-cell"></div><div class="m-cell"></div><div class="m-cell"></div><div class="m-cell"></div>
+            <div class="m-cell"></div><div class="m-cell"></div><div class="m-cell"></div><div class="m-cell"></div>
+          </div>
+        </div>
+
+        <div class="qkv-arrow">×</div>
+
+        <div style="text-align: center;">
+          <div class="card-label" style="position: static; transform: none; margin-bottom: 14px; color: var(--accent-mustard);">K<sup>T</sup> · KEY</div>
+          <div class="matrix-box k">
+            <div class="m-cell"></div><div class="m-cell"></div><div class="m-cell"></div><div class="m-cell"></div>
+            <div class="m-cell"></div><div class="m-cell"></div><div class="m-cell"></div><div class="m-cell"></div>
+            <div class="m-cell"></div><div class="m-cell"></div><div class="m-cell"></div><div class="m-cell"></div>
+            <div class="m-cell"></div><div class="m-cell"></div><div class="m-cell"></div><div class="m-cell"></div>
+          </div>
+        </div>
+
+        <div class="qkv-arrow">→</div>
+
+        <div style="text-align: center;">
+          <div class="card-label" style="position: static; transform: none; margin-bottom: 14px;">SCORES → softmax</div>
+          <div class="attn-grid" style="width: 160px; height: 160px;">
+            <div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+            <div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+            <div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+            <div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+            <div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+            <div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+          </div>
+        </div>
+
+        <div class="qkv-arrow">×</div>
+
+        <div style="text-align: center;">
+          <div class="card-label" style="position: static; transform: none; margin-bottom: 14px; color: var(--accent-green);">V · VALUE</div>
+          <div class="matrix-box v">
+            <div class="m-cell"></div><div class="m-cell"></div><div class="m-cell"></div><div class="m-cell"></div>
+            <div class="m-cell"></div><div class="m-cell"></div><div class="m-cell"></div><div class="m-cell"></div>
+            <div class="m-cell"></div><div class="m-cell"></div><div class="m-cell"></div><div class="m-cell"></div>
+            <div class="m-cell"></div><div class="m-cell"></div><div class="m-cell"></div><div class="m-cell"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="body-m" style="font-family: 'JetBrains Mono', monospace; color: var(--ink-soft); margin-top: 20px;">
+        attention 矩陣對角線最亮 = 每個 token 最關注自己;非對角線 = 跨位置依賴
+      </div>
+    </div>
+    <div class="slide-num">14b</div>
+  </section>
+
+  <!-- Slide 15: Self-attention code -->
+  <section data-screen-label="15 Attention Code">
+    <div class="slide-tag anim-fade anim-d1">Part 04 · Code</div>
+    <h2 class="h-1 anim-slide-up anim-d2" style="margin-top: 130px;">
+      用 5 行 PyTorch 寫出來
+    </h2>
+
+    <div style="display: grid; grid-template-columns: 1.5fr 1fr; gap: 60px; margin-top: 60px; flex: 1;">
+      <div class="anim-pop anim-d3" style="background: var(--ink); color: var(--paper); padding: 40px 50px; border: 3px solid var(--ink); box-shadow: var(--shadow); font-family: 'JetBrains Mono', monospace; font-size: 26px; line-height: 1.8;">
+<pre style="margin:0; font-family: inherit;"><span style="color:#8b9eb1;"># self-attention in 5 lines</span>
+Q = x @ W_q                        <span style="color:#c98e2b;"># ① project to Query</span>
+K = x @ W_k                        <span style="color:#c98e2b;"># ② project to Key</span>
+V = x @ W_v                        <span style="color:#c98e2b;"># ③ project to Value</span>
+<span style="background: rgba(182,67,42,0.35); padding: 2px 6px;">scores = (Q @ K.T) / sqrt(d_k)</span>     <span style="color:#c98e2b;"># ★ similarity</span>
+<span style="background: rgba(63,93,58,0.45); padding: 2px 6px;">out    = softmax(scores) @ V</span>      <span style="color:#c98e2b;"># ★ weighted sum</span></pre>
+      </div>
+
+      <div>
+        <div class="card anim-pop anim-d5" style="background: var(--paper);">
+          <div class="card-label red">★ 兩個重點行</div>
+          <div class="body-l" style="margin-top: 20px;">
+            <span class="hl-r">紅色那行</span> — 算所有 token 兩兩之間的相似度。
+          </div>
+          <div class="body-l" style="margin-top: 24px;">
+            <span class="hl-g">綠色那行</span> — 用相似度當權重,把 V 混在一起。
+          </div>
+        </div>
+        <div class="anim-slide-up anim-d7" style="margin-top: 30px; font-family: 'Fraunces', serif; font-style: italic; font-size: 24px; color: var(--ink-faint);">
+          ✦ √d<sub>k</sub> 是為了讓內積<br>不要爆炸 → softmax 才不會一面倒。
+        </div>
+      </div>
+    </div>
+    <div class="slide-num">15</div>
+  </section>
+
+  <!-- Slide 16: Multi-head -->
+  <section data-screen-label="16 Multi-Head">
+    <div class="slide-tag anim-fade anim-d1">Part 04 · Multi-Head</div>
+    <h2 class="h-1 anim-slide-up anim-d2" style="margin-top: 130px;">
+      Multi-Head <span style="font-style: italic; color: var(--ink-soft); font-size: 50px;">— 多個視角合在一起</span>
+    </h2>
+
+    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 30px; margin-top: 90px;">
+      <div class="anim-pop anim-d3" style="background: var(--paper); border: 3px solid var(--ink); padding: 30px; text-align: center; box-shadow: var(--shadow-soft);">
+        <div style="font-family: 'Fraunces', serif; font-weight: 800; font-size: 50px; color: var(--accent-red);">H₁</div>
+        <div class="body-m" style="font-size: 22px; margin-top: 12px;">關注<br><span class="hl-r">語法</span>關係</div>
+      </div>
+      <div class="anim-pop anim-d4" style="background: var(--paper); border: 3px solid var(--ink); padding: 30px; text-align: center; box-shadow: var(--shadow-soft);">
+        <div style="font-family: 'Fraunces', serif; font-weight: 800; font-size: 50px; color: var(--accent-green);">H₂</div>
+        <div class="body-m" style="font-size: 22px; margin-top: 12px;">關注<br><span class="hl-g">語意</span>相近</div>
+      </div>
+      <div class="anim-pop anim-d5" style="background: var(--paper); border: 3px solid var(--ink); padding: 30px; text-align: center; box-shadow: var(--shadow-soft);">
+        <div style="font-family: 'Fraunces', serif; font-weight: 800; font-size: 50px; color: var(--accent-blue);">H₃</div>
+        <div class="body-m" style="font-size: 22px; margin-top: 12px;">關注<br><span class="hl-b">指代</span>關係</div>
+      </div>
+      <div class="anim-pop anim-d6" style="background: var(--paper); border: 3px solid var(--ink); padding: 30px; text-align: center; box-shadow: var(--shadow-soft);">
+        <div style="font-family: 'Fraunces', serif; font-weight: 800; font-size: 50px; color: var(--accent-mustard);">H₄</div>
+        <div class="body-m" style="font-size: 22px; margin-top: 12px;">關注<br>位置鄰近</div>
+      </div>
+    </div>
+
+    <div class="anim-fade anim-d7" style="margin-top: 60px; display: flex; align-items: center; justify-content: center; gap: 30px;">
+      <div style="font-family: 'Fraunces', serif; font-size: 38px; font-weight: 800;">concat</div>
+      <div style="font-family: 'Fraunces', serif; font-size: 38px; color: var(--accent-red);">→</div>
+      <div class="eq-big" style="font-size: 28px; padding: 16px 28px;">MultiHead(Q,K,V) = Concat(head₁, ..., head<sub>h</sub>) Wᴼ</div>
+    </div>
+
+    <div class="anim-slide-up anim-d8 tagline" style="margin-top: 50px; font-size: 28px;">
+      原始論文用 8 個 head · GPT-3 用 96 個 · 越多越能看到不同面向
+    </div>
+    <div class="slide-num">16</div>
+  </section>
+
+  <!-- Slide 16b: Multi-head merge animation -->
+  <section data-screen-label="16b Multi-Head Anim">
+    <div class="slide-tag anim-fade anim-d1">Part 04 · Multi-Head · In Motion</div>
+    <h2 class="h-1 anim-slide-up anim-d2" style="margin-top: 110px;">
+      多個 head <span style="font-style: italic;">分頭學、合起來</span>
+    </h2>
+    <div class="body-l anim-slide-up anim-d3" style="margin-top: 16px; max-width: 1500px;">
+      每個 head 看不同的關係維度 — 語法、語意、指代、距離。最後 concat,再線性投影,得到統一輸出。
+    </div>
+
+    <div style="margin-top: 90px; flex: 1; display: flex; justify-content: center; align-items: center;">
+      <div class="anim-pop anim-d4 heads-merge">
+        <div class="head h1">語法</div>
+        <div class="head h2">語意</div>
+        <div class="head h3">指代</div>
+        <div class="head h4">距離</div>
+        <div class="merge">concat → W<sup>O</sup></div>
+      </div>
+    </div>
+
+    <div class="anim-fade anim-d6 tagline" style="margin-top: 30px; font-size: 24px; text-align: center;">
+      ✦ 原始論文 8 heads · BERT-base 12 heads · GPT-3 96 heads
+    </div>
+    <div class="slide-num">16b</div>
+  </section>
+
+  <!-- Slide 17: Architecture -->
+  <section data-screen-label="17 Architecture">
+    <div class="slide-tag anim-fade anim-d1">Part 04 · Architecture</div>
+    <h2 class="h-1 anim-slide-up anim-d2" style="margin-top: 130px;">
+      整體<span style="font-style: italic;">架構</span>
+    </h2>
+
+    <div class="anim-fade anim-d3" style="margin-top: 60px; flex: 1; display: flex; align-items: center; justify-content: center; gap: 80px;">
+      <!-- Encoder block -->
+      <div style="background: var(--paper); border: 3px solid var(--ink); box-shadow: var(--shadow); padding: 30px 40px; width: 380px;">
+        <div class="card-label" style="background: var(--accent-blue); color: var(--paper);">ENCODER × N</div>
+        <div style="margin-top: 20px; display: flex; flex-direction: column; gap: 14px;">
+          <div style="background: var(--bg-soft); border: 2px solid var(--ink); padding: 16px; text-align: center; font-family: 'Fraunces', serif; font-weight: 700; font-size: 26px;">Multi-Head Attention</div>
+          <div style="text-align: center; font-size: 22px;">↓ Add &amp; Norm</div>
+          <div style="background: var(--bg-soft); border: 2px solid var(--ink); padding: 16px; text-align: center; font-family: 'Fraunces', serif; font-weight: 700; font-size: 26px;">Feed-Forward</div>
+          <div style="text-align: center; font-size: 22px;">↓ Add &amp; Norm</div>
+        </div>
+        <div class="body-m" style="margin-top: 20px; font-size: 22px; text-align: center; font-style: italic;">把輸入編成 context-aware 表示</div>
+      </div>
+
+      <div style="font-family: 'Fraunces', serif; font-weight: 800; font-size: 80px; color: var(--accent-red);">→</div>
+
+      <!-- Decoder block -->
+      <div style="background: var(--paper); border: 3px solid var(--ink); box-shadow: var(--shadow); padding: 30px 40px; width: 380px;">
+        <div class="card-label" style="background: var(--accent-red); color: var(--paper);">DECODER × N</div>
+        <div style="margin-top: 20px; display: flex; flex-direction: column; gap: 14px;">
+          <div style="background: var(--bg-soft); border: 2px solid var(--ink); padding: 16px; text-align: center; font-family: 'Fraunces', serif; font-weight: 700; font-size: 24px;">Masked Multi-Head Attn</div>
+          <div style="background: var(--bg-soft); border: 2px solid var(--ink); padding: 16px; text-align: center; font-family: 'Fraunces', serif; font-weight: 700; font-size: 24px;">Cross-Attn (從 Encoder)</div>
+          <div style="background: var(--bg-soft); border: 2px solid var(--ink); padding: 16px; text-align: center; font-family: 'Fraunces', serif; font-weight: 700; font-size: 24px;">Feed-Forward</div>
+        </div>
+        <div class="body-m" style="margin-top: 20px; font-size: 22px; text-align: center; font-style: italic;">一邊看 Encoder · 一邊 generate 下一個字</div>
+      </div>
+    </div>
+
+    <div class="anim-slide-up anim-d6 tagline" style="margin-top: 30px; font-size: 26px;">
+      ✦ 一個 block 套很多層 → 後面所有 GPT/BERT/T5 都是這個架構的變形。
+    </div>
+    <div class="slide-num">17</div>
+  </section>
+
+  <!-- Slide 17b: LayerNorm + Residual + FFN -->
+  <section data-screen-label="17b LN Residual FFN">
+    <div class="slide-tag anim-fade anim-d1">Part 04 · Block Internals</div>
+    <h2 class="h-1 anim-slide-up anim-d2" style="margin-top: 110px;">
+      Block 內部:<span style="font-style: italic;">三個無名英雄</span>
+    </h2>
+    <div class="body-l anim-slide-up anim-d3" style="margin-top: 16px; max-width: 1500px;">
+      Self-Attention 是主角,但是這三個東西沒了 — Transformer 根本訓不起來。
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 50px; margin-top: 90px;">
+      <div class="anim-pop anim-d4" style="background: var(--paper); border: 3px solid var(--ink); padding: 40px; box-shadow: var(--shadow);">
+        <div class="card-label" style="color: var(--accent-red);">RESIDUAL · 殘差連結</div>
+        <div class="eq-big" style="margin-top: 24px;">x + Sublayer(x)</div>
+        <div class="body-s" style="margin-top: 20px;">原始輸入直接「跳線」加回輸出。讓梯度有條高速公路,深層也訓得動。</div>
+      </div>
+
+      <div class="anim-pop anim-d5" style="background: var(--paper); border: 3px solid var(--ink); padding: 40px; box-shadow: var(--shadow);">
+        <div class="card-label" style="color: var(--accent-blue);">LAYERNORM · 層歸一化</div>
+        <div class="eq-big" style="margin-top: 24px;">(x − μ) / σ · γ + β</div>
+        <div class="body-s" style="margin-top: 20px;">每層輸出都被「拉回」常態分布。穩定訓練,加速收斂。</div>
+      </div>
+
+      <div class="anim-pop anim-d6" style="background: var(--paper); border: 3px solid var(--ink); padding: 40px; box-shadow: var(--shadow);">
+        <div class="card-label" style="color: var(--accent-green);">FFN · 前饋網路</div>
+        <div class="eq-big" style="margin-top: 24px;">Linear → GELU → Linear</div>
+        <div class="body-s" style="margin-top: 20px;">attention 後再過兩層 MLP,加非線性。LLM 大部分的參數都在這裡。</div>
+      </div>
+    </div>
+
+    <div class="anim-fade anim-d8 tagline" style="margin-top: 60px; font-size: 26px; text-align: center;">
+      ✦ Attention 在「混合資訊」,FFN 在「處理資訊」,Residual + LN 在「保護梯度」。
+    </div>
+    <div class="slide-num">17b</div>
+  </section>
+
+  <!-- Slide 18: Positional encoding -->
+  <section data-screen-label="18 Positional Encoding">
+    <div class="slide-tag anim-fade anim-d1">Part 04 · Positional Encoding</div>
+    <h2 class="h-1 anim-slide-up anim-d2" style="margin-top: 130px;">
+      但...順序怎麼辦?
+    </h2>
+    <div class="body-l anim-slide-up anim-d3" style="margin-top: 24px; max-width: 1500px;">
+      Transformer 一次看全部 → 不知道誰前誰後。要<span class="hl-y">手動加位置資訊</span>進去。
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1fr 1.2fr; gap: 60px; margin-top: 70px; align-items: center;">
+      <div>
+        <div class="eq-big anim-pop anim-d4" style="font-size: 26px;">
+          <span class="eq-tag">SINUSOIDAL PE</span>
+          PE<sub>(pos, 2i)</sub>   = sin( pos / 10000<sup>2i/d</sup> )<br>
+          PE<sub>(pos, 2i+1)</sub> = cos( pos / 10000<sup>2i/d</sup> )
+        </div>
+        <div class="body-l anim-slide-up anim-d5" style="margin-top: 36px;">
+          不同維度用不同<span class="hl-r">頻率</span> — 模型能學到相對位置關係。
+        </div>
+        <div class="body-m anim-slide-up anim-d6" style="margin-top: 24px; font-size: 24px;">
+          後來的變形:<span class="hl-b">Learned PE</span>(BERT)、<span class="hl-b">RoPE</span>(LLaMA)、<span class="hl-b">ALiBi</span>。
+        </div>
+      </div>
+
+      <!-- Visualisation: sinusoid bands -->
+      <div class="card anim-pop anim-d5" style="padding: 30px;">
+        <div class="card-label">VISUAL · 不同頻率的波</div>
+        <svg viewBox="0 0 600 280" style="width: 100%; height: auto; margin-top: 20px;">
+          <g fill="none" stroke-width="3">
+            <path d="M 0 60 Q 30 0 60 60 T 120 60 T 180 60 T 240 60 T 300 60 T 360 60 T 420 60 T 480 60 T 540 60 T 600 60" stroke="#b6432a"/>
+            <path d="M 0 130 Q 60 70 120 130 T 240 130 T 360 130 T 480 130 T 600 130" stroke="#c98e2b"/>
+            <path d="M 0 200 Q 120 140 240 200 T 480 200 T 720 200" stroke="#3f5d3a"/>
+            <path d="M 0 260 Q 200 200 400 260 T 800 260" stroke="#2f5b75"/>
+          </g>
+          <g font-family="JetBrains Mono, monospace" font-size="14" fill="#5a4f3e">
+            <text x="10" y="44">dim 0 · high freq</text>
+            <text x="10" y="114">dim 2</text>
+            <text x="10" y="184">dim 4</text>
+            <text x="10" y="244">dim 6 · low freq</text>
+          </g>
+        </svg>
+      </div>
+    </div>
+    <div class="slide-num">18</div>
+  </section>
+
+  <!-- Slide 19: BERT -->
+  <section data-screen-label="19 BERT">
+    <div class="slide-tag anim-fade anim-d1">Part 05 · BERT</div>
+    <div style="margin-top: 130px;">
+      <div style="font-family: 'JetBrains Mono', monospace; color: var(--accent-blue); font-size: 22px; margin-bottom: 16px;" class="anim-fade anim-d2">ENCODER-ONLY · 2018 · GOOGLE</div>
+      <h2 class="h-disp anim-slide-up anim-d3" style="font-size: 130px;">BERT<span style="color: var(--accent-red); font-style: italic;">.</span></h2>
+      <div class="anim-slide-up anim-d4" style="font-family: 'Fraunces', serif; font-style: italic; font-size: 36px; color: var(--ink-soft); margin-top: 12px;">
+        Bidirectional Encoder Representations from Transformers
+      </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1.2fr 1fr; gap: 60px; margin-top: 80px;">
+      <div class="card anim-pop anim-d5" style="background: var(--paper);">
+        <div class="card-label blue">TRAINING TRICK · MLM</div>
+        <div class="body-l" style="margin-top: 20px;">
+          隨機<span class="hl-r">遮住</span> 15% 的字,讓模型猜回來。
+        </div>
+        <div style="margin-top: 30px; font-family: 'JetBrains Mono', monospace; font-size: 26px; line-height: 1.9; background: var(--bg-soft); padding: 22px; border: 2px solid var(--ink);">
+          自然語言<span style="background: var(--accent-red); color: var(--paper); padding: 4px 10px;">[MASK]</span>理是<br>
+          我最喜歡的課<br><br>
+          <span style="color: var(--accent-green);">→ predict: 處</span>
+        </div>
+      </div>
+      <div>
+        <div class="anim-slide-up anim-d6 body-l">
+          模型必須<span class="hl-y">同時看左邊和右邊</span>才能猜對 → 學會了真正的雙向 context。
+        </div>
+        <div class="tagline anim-slide-up anim-d7" style="margin-top: 40px; font-size: 26px;">
+          BERT 出來那天,所有 NLP benchmark 一夜被屠榜。<br>從此 fine-tuning 成為主流。
+        </div>
+      </div>
+    </div>
+    <div class="slide-num">19</div>
+  </section>
+
+  <!-- Slide 20: GPT -->
+  <section data-screen-label="20 GPT">
+    <div class="slide-tag anim-fade anim-d1">Part 05 · GPT</div>
+    <div style="margin-top: 130px;">
+      <div style="font-family: 'JetBrains Mono', monospace; color: var(--accent-red); font-size: 22px; margin-bottom: 16px;" class="anim-fade anim-d2">DECODER-ONLY · OPENAI · 2018→</div>
+      <h2 class="h-disp anim-slide-up anim-d3" style="font-size: 130px;">GPT<span style="color: var(--accent-red); font-style: italic;">.</span></h2>
+      <div class="anim-slide-up anim-d4" style="font-family: 'Fraunces', serif; font-style: italic; font-size: 36px; color: var(--ink-soft); margin-top: 12px;">
+        Generative Pre-trained Transformer
+      </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1fr 1.2fr; gap: 60px; margin-top: 80px;">
+      <div>
+        <div class="anim-slide-up anim-d5 body-l">
+          訓練目標超簡單 — 給定前面的字,<span class="hl-r">猜下一個字</span>。
+        </div>
+        <div class="anim-slide-up anim-d6" style="margin-top: 30px; font-family: 'JetBrains Mono', monospace; font-size: 28px; line-height: 1.9; background: var(--paper); border: 3px solid var(--ink); padding: 22px; box-shadow: var(--shadow);">
+          "我最喜歡吃" → <span style="color: var(--accent-red);">?</span><br>
+          <span style="color: var(--ink-faint);">prob:</span><br>
+          <span class="hl-r">  火鍋</span>  0.42<br>
+          <span class="hl-y">  牛肉麵</span> 0.31<br>
+          <span style="color: var(--ink-soft);">  蛋餅</span> 0.12
+        </div>
+      </div>
+      <div>
+        <div style="display: flex; flex-direction: column; gap: 20px;">
+          <div class="anim-slide-right anim-d6" style="display: flex; align-items: center; gap: 24px;">
+            <div class="mono" style="background: var(--accent-mustard); border: 3px solid var(--ink); padding: 8px 18px; font-size: 22px; min-width: 130px; text-align: center;">GPT-1</div>
+            <div class="body-l">117M params · 2018</div>
+          </div>
+          <div class="anim-slide-right anim-d7" style="display: flex; align-items: center; gap: 24px;">
+            <div class="mono" style="background: var(--accent-green); color: var(--paper); border: 3px solid var(--ink); padding: 8px 18px; font-size: 22px; min-width: 130px; text-align: center;">GPT-2</div>
+            <div class="body-l">1.5B params · 2019</div>
+          </div>
+          <div class="anim-slide-right anim-d8" style="display: flex; align-items: center; gap: 24px;">
+            <div class="mono" style="background: var(--accent-blue); color: var(--paper); border: 3px solid var(--ink); padding: 8px 18px; font-size: 22px; min-width: 130px; text-align: center;">GPT-3</div>
+            <div class="body-l">175B params · 2020 · in-context learning</div>
+          </div>
+          <div class="anim-slide-right anim-d8" style="display: flex; align-items: center; gap: 24px;">
+            <div class="mono" style="background: var(--accent-red); color: var(--paper); border: 3px solid var(--ink); padding: 8px 18px; font-size: 22px; min-width: 130px; text-align: center;">GPT-4</div>
+            <div class="body-l">~1.8T (估計) · 2023 · emergent abilities</div>
+          </div>
+        </div>
+        <div class="tagline anim-slide-up anim-d8" style="margin-top: 40px; font-size: 26px;">
+          越大越聰明 — scaling 才是真正的魔法。
+        </div>
+      </div>
+    </div>
+    <div class="slide-num">20</div>
+  </section>
+
+  <!-- Slide 19b: BERT MLM animation -->
+  <section data-screen-label="19b BERT MLM Anim">
+    <div class="slide-tag anim-fade anim-d1">Part 05 · BERT · MLM</div>
+    <h2 class="h-1 anim-slide-up anim-d2" style="margin-top: 110px;">
+      Masked Language Model — <span style="font-style: italic;">填空遊戲</span>
+    </h2>
+    <div class="body-l anim-slide-up anim-d3" style="margin-top: 16px; max-width: 1500px;">
+      隨機把 15% 的 token 蓋掉,讓模型從<span class="hl-y">雙向 context</span> 猜出來是什麼。
+    </div>
+
+    <div style="margin-top: 90px; flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 60px;">
+      <div class="anim-pop anim-d4 mlm-demo">
+        The cat sat on the <span class="reveal">[MASK]</span> .
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 30px; font-family: 'JetBrains Mono', monospace; font-size: 22px;">
+        <div style="color: var(--ink-soft);">model predicts →</div>
+      </div>
+
+      <div class="anim-pop anim-d6 nt-pred">
+        <div class="row r1"><div class="label">mat</div><div class="bar"></div><div>0.62</div></div>
+        <div class="row r2"><div class="label">floor</div><div class="bar"></div><div>0.18</div></div>
+        <div class="row r3"><div class="label">chair</div><div class="bar"></div><div>0.07</div></div>
+        <div class="row r4"><div class="label">sofa</div><div class="bar"></div><div>0.03</div></div>
+      </div>
+    </div>
+    <div class="slide-num">19b</div>
+  </section>
+
+  <!-- Slide 20b: GPT next-token animation -->
+  <section data-screen-label="20b GPT NextToken">
+    <div class="slide-tag anim-fade anim-d1">Part 05 · GPT · Autoregressive</div>
+    <h2 class="h-1 anim-slide-up anim-d2" style="margin-top: 110px;">
+      Next-Token Prediction — <span style="font-style: italic;">一次猜一個</span>
+    </h2>
+    <div class="body-l anim-slide-up anim-d3" style="margin-top: 16px; max-width: 1500px;">
+      只看左邊 (causal mask),預測下一個 token 的<span class="hl-r">機率分布</span>。然後 sample 出來,再餵回去。
+    </div>
+
+    <div style="margin-top: 80px; flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 70px; align-items: center;">
+      <div class="anim-pop anim-d4" style="background: var(--paper); border: 3px solid var(--ink); padding: 50px; box-shadow: var(--shadow);">
+        <div class="card-label">CONTEXT</div>
+        <div style="font-family: 'JetBrains Mono', monospace; font-size: 28px; line-height: 1.6; margin-top: 24px; color: var(--ink);">
+          深度學習很
+        </div>
+        <div style="font-family: 'JetBrains Mono', monospace; font-size: 22px; color: var(--ink-soft); margin-top: 30px;">
+          → predict next token
+        </div>
+      </div>
+
+      <div class="anim-pop anim-d5 nt-pred">
+        <div class="row r1"><div class="label">有趣</div><div class="bar"></div><div>0.41</div></div>
+        <div class="row r2"><div class="label">難</div><div class="bar"></div><div>0.32</div></div>
+        <div class="row r3"><div class="label">酷</div><div class="bar"></div><div>0.15</div></div>
+        <div class="row r4"><div class="label">紅</div><div class="bar"></div><div>0.04</div></div>
+      </div>
+    </div>
+
+    <div class="anim-fade anim-d7 tagline" style="margin-top: 50px; font-size: 24px; text-align: center;">
+      ✦ sample → append → repeat。整個 LLM 就是這個迴圈,做幾兆次。
+    </div>
+    <div class="slide-num">20b</div>
+  </section>
+
+  <!-- Slide 20c: Pretraining / Fine-tuning / Prompting paradigm -->
+  <section data-screen-label="20c Paradigms">
+    <div class="slide-tag anim-fade anim-d1">Part 05 · Three Paradigms</div>
+    <h2 class="h-1 anim-slide-up anim-d2" style="margin-top: 110px;">
+      三種<span style="font-style: italic;">使用範式</span>的演進
+    </h2>
+    <div class="body-l anim-slide-up anim-d3" style="margin-top: 16px; max-width: 1500px;">
+      從 task-specific 訓練 → 預訓練 + 微調 → prompting。每一代都讓門檻降一截。
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 40px; margin-top: 80px; flex: 1;">
+      <div class="anim-pop anim-d4" style="background: var(--paper); border: 3px solid var(--ink); padding: 40px; box-shadow: var(--shadow); display: flex; flex-direction: column;">
+        <div style="font-family: 'JetBrains Mono', monospace; color: var(--ink-faint); font-size: 16px;">~2017</div>
+        <div class="h-3" style="margin-top: 8px; color: var(--accent-red);">From Scratch</div>
+        <div class="body-s" style="margin-top: 18px;">每個任務從零訓練一個專屬模型。需要大量標註資料,通常幾十萬筆。</div>
+        <div style="margin-top: auto; padding-top: 20px; font-family: 'JetBrains Mono', monospace; font-size: 14px; color: var(--ink-faint);">label cost · 高</div>
+      </div>
+
+      <div class="anim-pop anim-d5" style="background: var(--paper); border: 3px solid var(--ink); padding: 40px; box-shadow: var(--shadow); display: flex; flex-direction: column;">
+        <div style="font-family: 'JetBrains Mono', monospace; color: var(--ink-faint); font-size: 16px;">2018 ~ 2020</div>
+        <div class="h-3" style="margin-top: 8px; color: var(--accent-blue);">Pretrain + Fine-tune</div>
+        <div class="body-s" style="margin-top: 18px;">在大語料 pretrain 一次,各任務只 fine-tune 幾千筆即可達 SOTA。BERT 帶起來的範式。</div>
+        <div style="margin-top: auto; padding-top: 20px; font-family: 'JetBrains Mono', monospace; font-size: 14px; color: var(--ink-faint);">label cost · 中</div>
+      </div>
+
+      <div class="anim-pop anim-d6" style="background: var(--ink); color: var(--paper); border: 3px solid var(--ink); padding: 40px; box-shadow: var(--shadow); display: flex; flex-direction: column;">
+        <div style="font-family: 'JetBrains Mono', monospace; color: var(--accent-mustard); font-size: 16px;">2020 ~ now</div>
+        <div class="h-3" style="margin-top: 8px; color: var(--accent-mustard);">Prompting / ICL</div>
+        <div class="body-s" style="margin-top: 18px; color: rgba(250,243,227,0.85);">一個大模型就解所有事,只要寫 prompt。few-shot example 直接放在 input 裡,不更新參數。</div>
+        <div style="margin-top: auto; padding-top: 20px; font-family: 'JetBrains Mono', monospace; font-size: 14px; color: var(--accent-mustard);">label cost · 接近 0</div>
+      </div>
+    </div>
+    <div class="slide-num">20c</div>
+  </section>
+
+  <!-- Slide 21: BERT vs GPT -->
+  <section data-screen-label="21 BERT vs GPT">
+    <div class="slide-tag anim-fade anim-d1">Part 05 · Compare</div>
+    <h2 class="h-1 anim-slide-up anim-d2" style="margin-top: 130px;">
+      兩條路線 <span style="font-style: italic; color: var(--ink-soft); font-size: 50px;">— 理解 vs 生成</span>
+    </h2>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 50px; margin-top: 80px; flex: 1;">
+      <div class="card anim-pop anim-d3 blue" style="background: var(--paper);">
+        <div class="card-label blue">BERT</div>
+        <div style="margin-top: 24px;">
+          <div style="display:flex; gap:18px; align-items:center; margin-bottom:18px;"><div style="width:14px; height:14px; background:var(--accent-blue); border:2px solid var(--ink);"></div><div class="body-l">雙向 · Encoder only</div></div>
+          <div style="display:flex; gap:18px; align-items:center; margin-bottom:18px;"><div style="width:14px; height:14px; background:var(--accent-blue); border:2px solid var(--ink);"></div><div class="body-l">Masked LM 訓練</div></div>
+          <div style="display:flex; gap:18px; align-items:center; margin-bottom:18px;"><div style="width:14px; height:14px; background:var(--accent-blue); border:2px solid var(--ink);"></div><div class="body-l">擅長:<span class="hl-b">分類 / NER / QA</span></div></div>
+          <div style="display:flex; gap:18px; align-items:center;"><div style="width:14px; height:14px; background:var(--accent-blue); border:2px solid var(--ink);"></div><div class="body-l">用法:<span class="hl-y">fine-tuning</span></div></div>
+        </div>
+      </div>
+      <div class="card anim-pop anim-d4 red" style="background: var(--paper);">
+        <div class="card-label red">GPT</div>
+        <div style="margin-top: 24px;">
+          <div style="display:flex; gap:18px; align-items:center; margin-bottom:18px;"><div style="width:14px; height:14px; background:var(--accent-red); border:2px solid var(--ink);"></div><div class="body-l">單向 · Decoder only</div></div>
+          <div style="display:flex; gap:18px; align-items:center; margin-bottom:18px;"><div style="width:14px; height:14px; background:var(--accent-red); border:2px solid var(--ink);"></div><div class="body-l">Next-token prediction</div></div>
+          <div style="display:flex; gap:18px; align-items:center; margin-bottom:18px;"><div style="width:14px; height:14px; background:var(--accent-red); border:2px solid var(--ink);"></div><div class="body-l">擅長:<span class="hl-r">對話 / 寫作 / 翻譯</span></div></div>
+          <div style="display:flex; gap:18px; align-items:center;"><div style="width:14px; height:14px; background:var(--accent-red); border:2px solid var(--ink);"></div><div class="body-l">用法:<span class="hl-y">prompting</span></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="anim-slide-up anim-d6 tagline" style="margin-top: 50px; font-size: 28px;">
+      ✦ 現在 GPT 系勝出 — 任何任務都能變成 next-token prediction。
+    </div>
+    <div class="slide-num">21</div>
+  </section>
+
+  <!-- Slide 21b: Scaling Laws -->
+  <section data-screen-label="21b Scaling Laws">
+    <div class="slide-tag anim-fade anim-d1">Part 05 · Scaling Laws</div>
+    <h2 class="h-1 anim-slide-up anim-d2" style="margin-top: 110px;">
+      規模 = 能力 — <span style="font-style: italic;">Scaling Laws</span>
+    </h2>
+    <div class="body-l anim-slide-up anim-d3" style="margin-top: 16px; max-width: 1500px;">
+      Kaplan 2020 / Chinchilla 2022:loss 與 模型大小、資料量、運算量,呈乾淨的<span class="hl-r">幂律關係</span>。
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1.2fr 1fr; gap: 70px; margin-top: 70px; flex: 1; align-items: center;">
+      <div class="anim-pop anim-d4 scaling-svg" style="background: var(--paper); border: 3px solid var(--ink); padding: 40px; box-shadow: var(--shadow);">
+        <div class="card-label">LOSS  vs  COMPUTE  (log-log)</div>
+        <svg viewBox="0 0 600 360" style="width: 100%; height: auto; margin-top: 20px;">
+          <!-- axes -->
+          <line x1="60" y1="320" x2="560" y2="320" stroke="#2b2419" stroke-width="3"/>
+          <line x1="60" y1="40"  x2="60"  y2="320" stroke="#2b2419" stroke-width="3"/>
+          <text x="310" y="350" text-anchor="middle" font-family="JetBrains Mono" font-size="16" fill="#2b2419">Compute (FLOPs, log scale)</text>
+          <text x="20" y="180" text-anchor="middle" font-family="JetBrains Mono" font-size="16" fill="#2b2419" transform="rotate(-90, 20, 180)">Loss</text>
+
+          <!-- gridlines -->
+          <line x1="60" y1="100" x2="560" y2="100" stroke="#d4c8a8" stroke-width="1" stroke-dasharray="3 3"/>
+          <line x1="60" y1="180" x2="560" y2="180" stroke="#d4c8a8" stroke-width="1" stroke-dasharray="3 3"/>
+          <line x1="60" y1="260" x2="560" y2="260" stroke="#d4c8a8" stroke-width="1" stroke-dasharray="3 3"/>
+
+          <!-- power-law curve -->
+          <path d="M 80 80 Q 200 130, 300 200 T 540 290" fill="none" stroke="#c34a3a" stroke-width="5"/>
+
+          <!-- data points -->
+          <circle cx="100" cy="95" r="7" fill="#5b86b8" stroke="#2b2419" stroke-width="2"/>
+          <circle cx="180" cy="135" r="7" fill="#5b86b8" stroke="#2b2419" stroke-width="2"/>
+          <circle cx="280" cy="190" r="7" fill="#5b86b8" stroke="#2b2419" stroke-width="2"/>
+          <circle cx="380" cy="240" r="7" fill="#5b86b8" stroke="#2b2419" stroke-width="2"/>
+          <circle cx="480" cy="275" r="7" fill="#5b86b8" stroke="#2b2419" stroke-width="2"/>
+
+          <!-- model labels -->
+          <text x="100" y="78" font-family="JetBrains Mono" font-size="12" fill="#2b2419">GPT-1</text>
+          <text x="180" y="125" font-family="JetBrains Mono" font-size="12" fill="#2b2419">GPT-2</text>
+          <text x="280" y="180" font-family="JetBrains Mono" font-size="12" fill="#2b2419">GPT-3</text>
+          <text x="380" y="230" font-family="JetBrains Mono" font-size="12" fill="#2b2419">PaLM</text>
+          <text x="480" y="265" font-family="JetBrains Mono" font-size="12" fill="#2b2419">GPT-4</text>
+        </svg>
+      </div>
+
+      <div class="anim-slide-left anim-d5">
+        <div class="eq-big" style="margin-bottom: 26px;">L(N) ∝ N<sup>−α</sup></div>
+        <div class="body-m" style="margin-top: 10px;">N = 模型大小;α ≈ 0.076。每加 10 倍參數,loss 約降 19%。</div>
+
+        <div style="margin-top: 36px; padding: 24px; background: var(--paper); border: 3px solid var(--ink); box-shadow: var(--shadow-soft);">
+          <div class="card-label" style="color: var(--accent-blue);">CHINCHILLA 法則</div>
+          <div class="body-s" style="margin-top: 14px;">每個參數應該配 ~20 個訓練 token。否則花了算力卻學不滿。</div>
+        </div>
+      </div>
+    </div>
+    <div class="slide-num">21b</div>
+  </section>
+
+  <!-- Slide 21c: Emergent abilities -->
+  <section data-screen-label="21c Emergent">
+    <div class="slide-tag anim-fade anim-d1">Part 05 · Emergent</div>
+    <h2 class="h-1 anim-slide-up anim-d2" style="margin-top: 110px;">
+      Emergent Abilities — <span style="font-style: italic;">突現能力</span>
+    </h2>
+    <div class="body-l anim-slide-up anim-d3" style="margin-top: 16px; max-width: 1500px;">
+      某些能力,小模型完全做不到 → 過了某個規模門檻,「啪」一下出現。不是線性成長,是相變。
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 60px; margin-top: 80px;">
+      <div class="anim-pop anim-d4" style="background: var(--paper); border: 3px solid var(--ink); padding: 40px; box-shadow: var(--shadow);">
+        <div class="card-label" style="color: var(--accent-red);">CHAIN-OF-THOUGHT</div>
+        <div class="body-m" style="margin-top: 18px; font-weight: 700;">「Let's think step by step」</div>
+        <div class="body-s" style="margin-top: 12px;">小於 ~100B 參數 → 完全沒效果。大於門檻 → 數學/推理大幅提升。</div>
+      </div>
+
+      <div class="anim-pop anim-d5" style="background: var(--paper); border: 3px solid var(--ink); padding: 40px; box-shadow: var(--shadow);">
+        <div class="card-label" style="color: var(--accent-blue);">IN-CONTEXT LEARNING</div>
+        <div class="body-m" style="margin-top: 18px; font-weight: 700;">「給幾個範例,直接學」</div>
+        <div class="body-s" style="margin-top: 12px;">不用更新參數,只在 prompt 裡放幾個 example,就能 generalize。</div>
+      </div>
+
+      <div class="anim-pop anim-d6" style="background: var(--paper); border: 3px solid var(--ink); padding: 40px; box-shadow: var(--shadow);">
+        <div class="card-label" style="color: var(--accent-green);">INSTRUCTION FOLLOWING</div>
+        <div class="body-m" style="margin-top: 18px; font-weight: 700;">「聽得懂自然語言指令」</div>
+        <div class="body-s" style="margin-top: 12px;">配合 RLHF / instruction tuning,模型能照人類意圖回應。</div>
+      </div>
+
+      <div class="anim-pop anim-d7" style="background: var(--paper); border: 3px solid var(--ink); padding: 40px; box-shadow: var(--shadow);">
+        <div class="card-label" style="color: var(--accent-mustard);">TOOL USE</div>
+        <div class="body-m" style="margin-top: 18px; font-weight: 700;">「會自己呼叫 API」</div>
+        <div class="body-s" style="margin-top: 12px;">大模型能學會在對話中決定何時查資料、跑程式、呼叫工具。</div>
+      </div>
+    </div>
+    <div class="slide-num">21c</div>
+  </section>
+
+  <!-- Slide 22: Multimodal -->
+  <section data-screen-label="22 Multimodal">
+    <div class="slide-tag anim-fade anim-d1">Part 05 · Multimodal</div>
+    <h2 class="h-1 anim-slide-up anim-d2" style="margin-top: 130px;">
+      Transformer <span style="font-style: italic;">不只</span>處理文字
+    </h2>
+    <div class="body-l anim-slide-up anim-d3" style="margin-top: 24px; max-width: 1500px;">
+      圖片、音訊、影片 — 全部都能塞進同一套架構。
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 40px; margin-top: 80px;">
+      <div class="card anim-pop anim-d4">
+        <div style="width:90px; height:90px; background: var(--accent-red); border: 3px solid var(--ink); display:flex; align-items:center; justify-content:center; font-family: 'Fraunces', serif; font-weight: 800; font-size: 40px; color: var(--paper); margin-bottom: 24px;">▣</div>
+        <div class="h-3" style="color: var(--accent-red); margin-bottom: 14px;">ViT</div>
+        <div class="body-l">把圖片切成 16×16 patch,<br>每個 patch 當成一個 token。</div>
+      </div>
+      <div class="card anim-pop anim-d5">
+        <div style="width:90px; height:90px; background: var(--accent-green); border: 3px solid var(--ink); display:flex; align-items:center; justify-content:center; font-family: 'Fraunces', serif; font-weight: 800; font-size: 40px; color: var(--paper); margin-bottom: 24px;">⇄</div>
+        <div class="h-3" style="color: var(--accent-green); margin-bottom: 14px;">CLIP</div>
+        <div class="body-l">圖片跟文字對齊到<br>同一個 embedding 空間。</div>
+      </div>
+      <div class="card anim-pop anim-d6">
+        <div style="width:90px; height:90px; background: var(--accent-blue); border: 3px solid var(--ink); display:flex; align-items:center; justify-content:center; font-family: 'Fraunces', serif; font-weight: 800; font-size: 40px; color: var(--paper); margin-bottom: 24px;">♪</div>
+        <div class="h-3" style="color: var(--accent-blue); margin-bottom: 14px;">Whisper</div>
+        <div class="body-l">語音 → 梅爾頻譜 →<br>Transformer 做語音辨識。</div>
+      </div>
+    </div>
+
+    <div class="anim-slide-up anim-d8 tagline" style="margin-top: 60px; font-size: 28px;">
+      ✦ 不同模態,共用同一套架構 — Transformer 真的是萬能武器。
+    </div>
+    <div class="slide-num">22</div>
+  </section>
+
+  <!-- Slide 22b: Real-world applications -->
+  <section data-screen-label="22b Applications">
+    <div class="slide-tag anim-fade anim-d1">Part 05 · In The Wild</div>
+    <h2 class="h-1 anim-slide-up anim-d2" style="margin-top: 110px;">
+      這套架構在<span style="font-style: italic;">現實世界</span>長什麼樣
+    </h2>
+    <div class="body-l anim-slide-up anim-d3" style="margin-top: 16px; max-width: 1500px;">
+      不是只活在 paper 裡。Transformer 已經滲透到你每天用的工具。
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 30px; margin-top: 80px;">
+      <div class="anim-pop anim-d4" style="background: var(--paper); border: 3px solid var(--ink); padding: 32px; box-shadow: var(--shadow);">
+        <div style="font-family: 'Fraunces', serif; font-weight: 800; font-size: 38px; color: var(--accent-red);">01</div>
+        <div class="h-3" style="margin-top: 8px; font-size: 28px;">對話助理</div>
+        <div class="body-s" style="margin-top: 14px;">ChatGPT · Claude · Gemini · 用 GPT-style decoder + RLHF</div>
+      </div>
+
+      <div class="anim-pop anim-d5" style="background: var(--paper); border: 3px solid var(--ink); padding: 32px; box-shadow: var(--shadow);">
+        <div style="font-family: 'Fraunces', serif; font-weight: 800; font-size: 38px; color: var(--accent-blue);">02</div>
+        <div class="h-3" style="margin-top: 8px; font-size: 28px;">寫程式</div>
+        <div class="body-s" style="margin-top: 14px;">Copilot · Cursor · Codex 系列,把 code 當作另一種語言。</div>
+      </div>
+
+      <div class="anim-pop anim-d6" style="background: var(--paper); border: 3px solid var(--ink); padding: 32px; box-shadow: var(--shadow);">
+        <div style="font-family: 'Fraunces', serif; font-weight: 800; font-size: 38px; color: var(--accent-green);">03</div>
+        <div class="h-3" style="margin-top: 8px; font-size: 28px;">搜尋 / RAG</div>
+        <div class="body-s" style="margin-top: 14px;">用 embedding 把文件 index,LLM 當 reasoning 引擎。</div>
+      </div>
+
+      <div class="anim-pop anim-d7" style="background: var(--paper); border: 3px solid var(--ink); padding: 32px; box-shadow: var(--shadow);">
+        <div style="font-family: 'Fraunces', serif; font-weight: 800; font-size: 38px; color: var(--accent-mustard);">04</div>
+        <div class="h-3" style="margin-top: 8px; font-size: 28px;">語音 / 翻譯</div>
+        <div class="body-s" style="margin-top: 14px;">Whisper · NLLB · Seamless,一套 Transformer 通吃多語言。</div>
+      </div>
+
+      <div class="anim-pop anim-d4" style="background: var(--paper); border: 3px solid var(--ink); padding: 32px; box-shadow: var(--shadow);">
+        <div style="font-family: 'Fraunces', serif; font-weight: 800; font-size: 38px; color: var(--accent-red);">05</div>
+        <div class="h-3" style="margin-top: 8px; font-size: 28px;">影像生成</div>
+        <div class="body-s" style="margin-top: 14px;">DALL-E · Stable Diffusion · Sora,Diffusion + Transformer backbone。</div>
+      </div>
+
+      <div class="anim-pop anim-d5" style="background: var(--paper); border: 3px solid var(--ink); padding: 32px; box-shadow: var(--shadow);">
+        <div style="font-family: 'Fraunces', serif; font-weight: 800; font-size: 38px; color: var(--accent-blue);">06</div>
+        <div class="h-3" style="margin-top: 8px; font-size: 28px;">蛋白質結構</div>
+        <div class="body-s" style="margin-top: 14px;">AlphaFold 把 amino acid 序列當作 token,結構預測獲諾貝爾獎。</div>
+      </div>
+
+      <div class="anim-pop anim-d6" style="background: var(--paper); border: 3px solid var(--ink); padding: 32px; box-shadow: var(--shadow);">
+        <div style="font-family: 'Fraunces', serif; font-weight: 800; font-size: 38px; color: var(--accent-green);">07</div>
+        <div class="h-3" style="margin-top: 8px; font-size: 28px;">推薦系統</div>
+        <div class="body-s" style="margin-top: 14px;">把使用者行為當 sequence,Transformer 預測下一個會點什麼。</div>
+      </div>
+
+      <div class="anim-pop anim-d7" style="background: var(--ink); color: var(--paper); border: 3px solid var(--ink); padding: 32px; box-shadow: var(--shadow);">
+        <div style="font-family: 'Fraunces', serif; font-weight: 800; font-size: 38px; color: var(--accent-mustard);">08</div>
+        <div class="h-3" style="margin-top: 8px; font-size: 28px; color: var(--paper);">Agents</div>
+        <div class="body-s" style="margin-top: 14px; color: rgba(250,243,227,0.85);">LLM + tools + memory loop,自動化 workflow,正在爆發。</div>
+      </div>
+    </div>
+    <div class="slide-num">22b</div>
+  </section>
+
+  <!-- Slide 23: Recap timeline -->
+  <section data-screen-label="23 Recap">
+    <div class="slide-tag anim-fade anim-d1">Recap · 回顧</div>
+    <h2 class="h-1 anim-slide-up anim-d2" style="margin-top: 130px;">
+      我們今天走過的<span style="font-style: italic;">時間軸</span>
+    </h2>
+
+    <div style="margin-top: 100px; flex: 1; display: flex; align-items: center;">
+      <div style="position: relative; width: 100%;">
+        <!-- timeline line -->
+        <div style="position: absolute; top: 50%; left: 0; right: 0; height: 4px; background: var(--ink); transform: translateY(-50%);"></div>
+        <div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 0; position: relative;">
+          <div class="anim-pop anim-d3" style="text-align: center;">
+            <div style="width: 36px; height: 36px; background: var(--accent-red); border: 4px solid var(--ink); border-radius: 50%; margin: 0 auto 16px;"></div>
+            <div class="mono" style="font-size: 18px; color: var(--ink-faint);">2014</div>
+            <div class="h-3" style="margin-top: 8px;">RNN</div>
+            <div class="body-m" style="font-size: 20px; margin-top: 6px;">序列建模</div>
+          </div>
+          <div class="anim-pop anim-d4" style="text-align: center;">
+            <div style="width: 36px; height: 36px; background: var(--accent-mustard); border: 4px solid var(--ink); border-radius: 50%; margin: 0 auto 16px;"></div>
+            <div class="mono" style="font-size: 18px; color: var(--ink-faint);">2015</div>
+            <div class="h-3" style="margin-top: 8px;">LSTM</div>
+            <div class="body-m" style="font-size: 20px; margin-top: 6px;">解決遺忘</div>
+          </div>
+          <div class="anim-pop anim-d5" style="text-align: center;">
+            <div style="width: 36px; height: 36px; background: var(--accent-green); border: 4px solid var(--ink); border-radius: 50%; margin: 0 auto 16px;"></div>
+            <div class="mono" style="font-size: 18px; color: var(--ink-faint);">2017</div>
+            <div class="h-3" style="margin-top: 8px;">Transformer</div>
+            <div class="body-m" style="font-size: 20px; margin-top: 6px;">一次看全部</div>
+          </div>
+          <div class="anim-pop anim-d6" style="text-align: center;">
+            <div style="width: 36px; height: 36px; background: var(--accent-blue); border: 4px solid var(--ink); border-radius: 50%; margin: 0 auto 16px;"></div>
+            <div class="mono" style="font-size: 18px; color: var(--ink-faint);">2018</div>
+            <div class="h-3" style="margin-top: 8px;">ELMo / BERT</div>
+            <div class="body-m" style="font-size: 20px; margin-top: 6px;">理解 context</div>
+          </div>
+          <div class="anim-pop anim-d7" style="text-align: center;">
+            <div style="width: 36px; height: 36px; background: var(--accent-pink); border: 4px solid var(--ink); border-radius: 50%; margin: 0 auto 16px;"></div>
+            <div class="mono" style="font-size: 18px; color: var(--ink-faint);">2020</div>
+            <div class="h-3" style="margin-top: 8px;">GPT-3</div>
+            <div class="body-m" style="font-size: 20px; margin-top: 6px;">scaling 為王</div>
+          </div>
+          <div class="anim-pop anim-d8" style="text-align: center;">
+            <div style="width: 36px; height: 36px; background: var(--ink); border: 4px solid var(--accent-red); border-radius: 50%; margin: 0 auto 16px;"></div>
+            <div class="mono" style="font-size: 18px; color: var(--ink-faint);">2023+</div>
+            <div class="h-3" style="margin-top: 8px;">Multimodal</div>
+            <div class="body-m" style="font-size: 20px; margin-top: 6px;">跨模態</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="anim-fade anim-d8 tagline" style="margin-top: 60px; font-size: 28px;">
+      每一步都站在前一步的肩膀上,解決前一步的痛點。
+    </div>
+    <div class="slide-num">23</div>
+  </section>
+
+  <!-- Slide 24: Homework -->
+  <section data-screen-label="24 Homework">
+    <div class="slide-tag anim-fade anim-d1">Homework · 作業</div>
+    <h2 class="h-1 anim-slide-up anim-d2" style="margin-top: 130px;">
+      回去做這<span style="font-style: italic;">三件事</span>
+    </h2>
+
+    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 40px; margin-top: 90px; flex: 1;">
+      <div class="card anim-pop anim-d3" style="background: var(--paper); display: flex; flex-direction: column;">
+        <div style="font-family: 'Fraunces', serif; font-weight: 800; font-size: 100px; color: var(--accent-red); line-height: 0.9;">01</div>
+        <div class="h-3" style="margin-top: 20px;">RNN 文字分類</div>
+        <div class="body-l" style="margin-top: 18px; flex: 1;">手刻一個簡單 RNN,跑情感分析。<br>感受 sequential processing。</div>
+        <div class="mono" style="margin-top: 20px; font-size: 22px; color: var(--ink-faint);">~ 100 lines</div>
+      </div>
+      <div class="card anim-pop anim-d4" style="background: var(--paper); display: flex; flex-direction: column;">
+        <div style="font-family: 'Fraunces', serif; font-weight: 800; font-size: 100px; color: var(--accent-mustard); line-height: 0.9;">02</div>
+        <div class="h-3" style="margin-top: 20px;">Mini Self-Attention</div>
+        <div class="body-l" style="margin-top: 18px; flex: 1;">用 PyTorch 寫一個 single-head attention,<br>視覺化 attention map。</div>
+        <div class="mono" style="margin-top: 20px; font-size: 22px; color: var(--ink-faint);">~ 50 lines</div>
+      </div>
+      <div class="card anim-pop anim-d5" style="background: var(--paper); display: flex; flex-direction: column;">
+        <div style="font-family: 'Fraunces', serif; font-weight: 800; font-size: 100px; color: var(--accent-green); line-height: 0.9;">03</div>
+        <div class="h-3" style="margin-top: 20px;">BERT Fine-tuning</div>
+        <div class="body-l" style="margin-top: 18px; flex: 1;">用 HuggingFace 拉 BERT,<br>fine-tune 一個下游任務。</div>
+        <div class="mono" style="margin-top: 20px; font-size: 22px; color: var(--ink-faint);">~ Colab notebook</div>
+      </div>
+    </div>
+
+    <div class="anim-slide-up anim-d7" style="margin-top: 50px; display: flex; justify-content: space-between; align-items: center;">
+      <div class="tagline" style="font-size: 28px; margin: 0;">
+        Deadline · 兩週後 · 有問題 Slack 我或來 office hour
+      </div>
+      <div class="stamp" style="position: static; transform: rotate(-6deg);">Thanks!</div>
+    </div>
+    <div class="slide-num">24</div>
+  </section>
+
+</deck-stage>
+
+<!-- Tweaks panel -->
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" src="tweaks-app.jsx"></script>
+
+</body>
+</html>
