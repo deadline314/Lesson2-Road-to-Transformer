@@ -32,7 +32,7 @@ const pageLabels = [
   'Self-Attention 互動可視化',
   'BERT vs GPT — 兩條技術路線',
   '多模態 — CLIP / BLIP / LLaVA',
-  '作業 2 — 設計你自己的多模態模型'
+  '作業 — 設計你自己的模型'
 ];
 let currentPage = 0;
 const totalPages = 9;

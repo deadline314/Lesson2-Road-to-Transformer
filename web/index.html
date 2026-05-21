@@ -2833,87 +2833,97 @@
   <div class="page-header">
     <div class="page-num">08</div>
     <div>
-      <h1 class="page-title">作業 2 — 設計你自己的多模態模型</h1>
-      <div class="page-sub">不是要做 SOTA，是要你「想清楚為什麼這樣設計」</div>
+      <h1 class="page-title">作業 — 設計你自己的模型</h1>
+      <div class="page-sub">Homework Assignment · Due in 2 weeks</div>
     </div>
   </div>
 
   <div class="stamp" style="top:60px; right:8vw;">HOMEWORK</div>
 
-  <p class="page-tagline">「資料集規模不用大，重點是流程跑得通、設計有思考。」</p>
+  <p class="page-tagline">「請學弟們下面挑一個來做，當然都做是最好的。」</p>
 
-  <h2 class="section-h">作業要求</h2>
-  <div class="compare-grid">
-    <div class="compare-card">
-      <h4>① 自己建資料集</h4>
-      <p style="font-size:13px;">
-        <strong>不能用</strong> COCO、Flickr 等現成資料集。<br/>
-        規模 30~100 對就夠：自己拍的照 + 描述、影片片段 + 字幕、音樂 + 歌詞、心情日記 + emoji…
-      </p>
-    </div>
-    <div class="compare-card">
-      <h4>② 設計自己的架構</h4>
-      <p style="font-size:13px;">
-        兩個模態自選（圖+文、音+文、影片+字幕…）。選一個融合策略並說明為什麼。可以用 pretrained encoder（CLIP, BERT 都 OK）。
-      </p>
-    </div>
-    <div class="compare-card">
-      <h4>③ 簡短報告</h4>
-      <p style="font-size:13px;">
-        PDF 或 Markdown 都可以。<strong>重點不在 accuracy，在思考過程</strong>。
-      </p>
-    </div>
-  </div>
-
-  <h2 class="section-h">報告必須回答的四個問題</h2>
-  <div class="callout" data-label="Q1">
-    <p style="margin:6px 0; font-size:14.5px;">
-      <strong>為什麼選這兩個模態？</strong> 這個組合可以解什麼問題、有什麼有趣的應用？
-    </p>
-  </div>
-  <div class="callout" data-label="Q2">
-    <p style="margin:6px 0; font-size:14.5px;">
-      <strong>兩個模態怎麼融合？</strong> Early / Late / Cross-attention / Unified Token — 你選哪個？為什麼？這個選擇有什麼 trade-off？
-    </p>
-  </div>
-  <div class="callout" data-label="Q3">
-    <p style="margin:6px 0; font-size:14.5px;">
-      <strong>訓練上遇到什麼問題？怎麼解決的？</strong>（沒遇到問題反而可疑）
-    </p>
-  </div>
-  <div class="callout" data-label="Q4">
-    <p style="margin:6px 0; font-size:14.5px;">
-      <strong>有 demo 結果就放上來</strong>（不管成功失敗）。失敗的 demo 配上分析，比成功但沒思考的 demo 分數還高。
-    </p>
-  </div>
-
-  <h2 class="section-h">起手式建議</h2>
-  <table class="book">
-    <tbody>
-      <tr><th>步驟</th><th>建議</th></tr>
-      <tr><td>① 想題目</td><td>選一個你「真的覺得有趣」的應用 — 動力是最重要的</td></tr>
-      <tr><td>② 收資料</td><td>30~100 對就夠。寧可少而精，不要多而髒</td></tr>
-      <tr><td>③ 切 train/test</td><td>20% 留 test，<strong>千萬別偷看</strong></td></tr>
-      <tr><td>④ 用 pretrained 起步</td><td>CLIP、BERT、ResNet — 不要從零訓練</td></tr>
-      <tr><td>⑤ 先用最簡單的融合</td><td>Late fusion + cosine similarity 是最容易跑通的 baseline</td></tr>
-      <tr><td>⑥ 出問題 → 分析 → 改進</td><td>這個 loop 走幾遍才是學習發生的地方</td></tr>
-    </tbody>
-  </table>
-
-  <div class="callout" data-label="評分原則">
-    <p style="margin:6px 0; font-size:14.5px;">
-      重要程度排序：<br/>
-      <strong>① 思考清晰度</strong> &gt; <strong>② 流程完整性</strong> &gt; <strong>③ 創意</strong> &gt; <strong>④ 結果效能</strong><br/><br/>
-      做不出 SOTA 沒關係，<span class="hd-under">不知道自己為什麼這樣做</span>才是大問題。
-    </p>
-  </div>
-
-  <h2 class="section-h">交件方式</h2>
+  <h2 class="section-h">作業說明</h2>
   <p class="body-p">
-    GitHub repo 包含：(1) 程式碼、(2) 資料集（或下載連結）、(3) 報告 PDF/Markdown、(4) README 寫怎麼跑。<strong>給未來會回來看自己 code 的你，留一份體面的 repo。</strong>
+    以下三個題目請<strong>至少挑一個</strong>來完成。每個題目都涵蓋了本次課程的核心概念，
+    從 RNN 到 Self-Attention 到 BERT，選擇你最有興趣的方向深入實作。
   </p>
 
-  <p class="page-tagline" style="margin-top:40px;">期待看到你們的設計 — 玩得開心。</p>
+  <h2 class="section-h">題目一：RNN 文字分類</h2>
+  <div class="compare-grid">
+    <div class="compare-card">
+      <h4>手刻 RNN</h4>
+      <p style="font-size:13px;">
+        用 PyTorch 手刻一個簡單的 RNN 模型。
+      </p>
+    </div>
+    <div class="compare-card">
+      <h4>情感分析 / 翻譯</h4>
+      <p style="font-size:13px;">
+        跑一個<span class="hov" data-tip="情感分析 (Sentiment Analysis)：判斷一段文字的情感傾向（正面/負面/中性）。常見資料集有 IMDB、SST-2 等。">情感分析</span>或簡單翻譯任務。
+      </p>
+    </div>
+    <div class="compare-card">
+      <h4>感受 Sequential Processing</h4>
+      <p style="font-size:13px;">
+        體會 RNN 必須<span class="hov" data-tip="Sequential Processing：RNN 必須一個 token 接一個 token 處理，無法平行化。這是它的核心限制，也是 Transformer 要解決的問題。">逐步處理</span>的特性與限制。
+      </p>
+    </div>
+  </div>
+
+  <h2 class="section-h">題目二：Mini Self-Attention</h2>
+  <div class="compare-grid">
+    <div class="compare-card">
+      <h4>Single-Head Attention</h4>
+      <p style="font-size:13px;">
+        用 PyTorch 寫一個 <span class="hov" data-tip="Single-Head Attention：最基本的 attention 機制。計算 Q·K^T / √d_k 再乘以 V，得到加權後的輸出。">single-head attention</span> 實作。
+      </p>
+    </div>
+    <div class="compare-card">
+      <h4>Attention Map 視覺化</h4>
+      <p style="font-size:13px;">
+        跑一個視覺化 <span class="hov" data-tip="Attention Map：一張熱力圖，顯示每個 token 對其他 token 的注意力權重。可以直觀看出模型「在看哪裡」。">attention map</span> 的圖片。如果能生成可互動的工具就更好了。
+      </p>
+    </div>
+    <div class="compare-card">
+      <h4>推薦工具</h4>
+      <p style="font-size:13px;">
+        其實有現成套件可以用：<a href="https://github.com/jessevig/bertviz" target="_blank" style="color:var(--accent-blue);">BertViz</a> — 視覺化各層各頭的 attention pattern。
+      </p>
+    </div>
+  </div>
+
+  <h2 class="section-h">題目三：BERT Fine-tuning</h2>
+  <div class="compare-grid">
+    <div class="compare-card">
+      <h4>拉 BERT 模型</h4>
+      <p style="font-size:13px;">
+        用 <span class="hov" data-tip="HuggingFace：提供大量預訓練模型的平台。可以一行程式碼載入 BERT、GPT 等模型。">HuggingFace</span> 拉一個 BERT（可自行選擇版本，不一定要用課程提供的）。
+      </p>
+    </div>
+    <div class="compare-card">
+      <h4>Fine-tune 下游任務</h4>
+      <p style="font-size:13px;">
+        Fine-tune 一個<span class="hov" data-tip="下游任務 (Downstream Task)：在預訓練模型的基礎上，針對特定任務進行微調。常見任務包括文本分類、NER、問答等。">下游任務</span>：分類任務、<span class="hov" data-tip="NER (Named Entity Recognition)：命名實體辨識，從文本中找出人名、地名、組織名等實體。">NER</span>、問答等皆可。
+      </p>
+    </div>
+    <div class="compare-card">
+      <h4>自由選擇</h4>
+      <p style="font-size:13px;">
+        任務和模型都自由選擇，重點是要能跑通並說明你的設計思路。
+      </p>
+    </div>
+  </div>
+
+  <h2 class="section-h">繳交方式</h2>
+  <div class="callout" data-label="繳交說明">
+    <p style="margin:6px 0; font-size:14.5px;">
+      • 程式碼：GitHub repo（含 README 說明如何執行）<br/>
+      • 報告：簡單說明你的設計思路、實驗結果<br/>
+      • 截止日期：兩週後（詳見課程公告）
+    </p>
+  </div>
+
+  <p class="page-tagline" style="margin-top:40px;">期待看到你們的作品 — 玩得開心。</p>
 </section>
 
 </main>

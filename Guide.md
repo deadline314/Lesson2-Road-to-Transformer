@@ -1334,24 +1334,17 @@ flowchart TD
 
 ## 8. 作業說明
 
-### 作業 2：設計你自己的多模態模型
+### 設計你自己的模型
 
-請學弟們：
+請學弟們下面挑一個來做，當然都做是最好的:
 
-1. **自己建置資料集 + 測試集**（不能用 COCO、Flickr 這類現成的）
-   - 規模不用大，30~100 對就夠
-   - 可以是你自己拍的照片 + 你寫的描述
-   - 可以是音樂剪輯 + 歌詞
-   - 可以是影片片段 + 字幕
-
-2. **設計你自己的多模態架構**
-   - 兩個模態自選（圖+文、音+文、影片+字幕…）
-   - 選一個融合策略並說明為什麼選它
-
-3. **寫一份簡短的報告（PDF or Markdown）**，要回答：
-   - 為什麼選這兩個模態？這個組合可以解什麼問題？
-   - 兩個模態怎麼融合？(Early / Late / Cross-attention)
-   - 訓練上遇到什麼問題？怎麼解決？
-   - 如果有 demo 結果（不管成功失敗）放上來
-
-> **重點：不是要你做出 SOTA，而是要你「想清楚為什麼這樣設計」**。流程跑得通、有思考過，比 accuracy 高更重要。
+1. **RNN 文字分類**
+手刻一個簡單 RNN,跑情感分析或翻譯
+感受 sequential processin
+2. **Mini Self-Attention**
+用 PyTorch 寫一個 single-head attention
+然後跑一個視覺化 attention map 的圖片，如果能生成可以互動的工具就更好了
+> 其實有現成套件可以用 [bertviz](https://github.com/jessevig/bertviz)
+3. **BERT Fine-tuning**
+用 HuggingFace 拉 [BERT](https://huggingface.co/google-bert/bert-base-uncased)(可以自己找，不一定要用我提供的)
+fine-tune 一個下游任務，看是要分類任務、NER等等的都可以
