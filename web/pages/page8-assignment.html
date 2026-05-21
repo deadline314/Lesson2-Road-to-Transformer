@@ -1,0 +1,82 @@
+<!-- ============ PAGE 8 — 作業 ============ -->
+<div class="page-header">
+  <span class="page-num">08</span>
+  <div>
+    <h1 class="page-title">作業 2 — 設計你自己的模型</h1>
+    <div class="page-sub">Homework Assignment · Due in 2 weeks</div>
+  </div>
+</div>
+<p class="page-tagline">「請學弟們下面挑一個來做，當然都做是最好的。」</p>
+
+<!-- ===== 作業說明 ===== -->
+<h2 class="section-h">作業說明</h2>
+<p class="body-p">
+  以下三個題目請<strong>至少挑一個</strong>來完成。每個題目都涵蓋了本次課程的核心概念，
+  從 RNN 到 Self-Attention 到 BERT，選擇你最有興趣的方向深入實作。
+</p>
+
+<!-- ===== 題目一 ===== -->
+<h3 style="color:var(--accent-blue); margin-top:24px;">題目一：RNN 文字分類</h3>
+<div class="step-viz">
+  <div class="step-row">
+    <div class="step-num">1</div>
+    <div class="step-content">手刻一個簡單的 RNN（可用 PyTorch）</div>
+  </div>
+  <div class="step-row">
+    <div class="step-num">2</div>
+    <div class="step-content">跑一個<span class="hov" data-tip="情感分析 (Sentiment Analysis)：判斷一段文字的情感傾向（正面/負面/中性）。常見資料集有 IMDB、SST-2 等。">情感分析</span>或簡單翻譯任務</div>
+  </div>
+  <div class="step-row">
+    <div class="step-num">3</div>
+    <div class="step-content">感受 <span class="hov" data-tip="Sequential Processing：RNN 必須一個 token 接一個 token 處理，無法平行化。這是它的核心限制，也是 Transformer 要解決的問題。">sequential processing</span> 的特性與限制</div>
+  </div>
+</div>
+
+<!-- ===== 題目二 ===== -->
+<h3 style="color:var(--accent-red); margin-top:24px;">題目二：Mini Self-Attention</h3>
+<div class="step-viz">
+  <div class="step-row">
+    <div class="step-num">1</div>
+    <div class="step-content">用 PyTorch 寫一個 <span class="hov" data-tip="Single-Head Attention：最基本的 attention 機制。計算 Q·K^T / √d_k 再乘以 V，得到加權後的輸出。">single-head attention</span></div>
+  </div>
+  <div class="step-row">
+    <div class="step-num">2</div>
+    <div class="step-content">跑一個視覺化 <span class="hov" data-tip="Attention Map：一張熱力圖，顯示每個 token 對其他 token 的注意力權重。可以直觀看出模型「在看哪裡」。">attention map</span> 的圖片</div>
+  </div>
+  <div class="step-row">
+    <div class="step-num">3</div>
+    <div class="step-content">（加分）生成可互動的視覺化工具</div>
+  </div>
+</div>
+<div class="callout" data-label="提示">
+  <p style="margin:6px 0; font-size:14px;">
+    其實有現成套件可以用：<a href="https://github.com/jessevig/bertviz" target="_blank" style="color:var(--accent-blue);">BertViz</a> — 可以視覺化各層各頭的 attention pattern。
+  </p>
+</div>
+
+<!-- ===== 題目三 ===== -->
+<h3 style="color:var(--accent-green, #2d8a4e); margin-top:24px;">題目三：BERT Fine-tuning</h3>
+<div class="step-viz">
+  <div class="step-row">
+    <div class="step-num">1</div>
+    <div class="step-content">用 <span class="hov" data-tip="HuggingFace：提供大量預訓練模型的平台。可以一行程式碼載入 BERT、GPT 等模型。">HuggingFace</span> 拉一個 BERT 模型（可自行選擇版本）</div>
+  </div>
+  <div class="step-row">
+    <div class="step-num">2</div>
+    <div class="step-content">Fine-tune 一個<span class="hov" data-tip="下游任務 (Downstream Task)：在預訓練模型的基礎上，針對特定任務進行微調。常見任務包括文本分類、NER、問答等。">下游任務</span></div>
+  </div>
+  <div class="step-row">
+    <div class="step-num">3</div>
+    <div class="step-content">任務選擇：分類任務、<span class="hov" data-tip="NER (Named Entity Recognition)：命名實體辨識，從文本中找出人名、地名、組織名等實體。">NER</span>、問答等皆可</div>
+  </div>
+</div>
+
+<!-- ===== 繳交方式 ===== -->
+<h2 class="section-h">繳交方式</h2>
+<div class="callout" data-label="繳交說明">
+  <p style="margin:6px 0; font-size:14px;">
+    • 程式碼：GitHub repo（含 README 說明如何執行）<br/>
+    • 報告：簡單說明你的設計思路、實驗結果<br/>
+    • 截止日期：兩週後（詳見課程公告）
+  </p>
+</div>
